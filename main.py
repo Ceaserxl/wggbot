@@ -174,56 +174,58 @@ class UpscaleButton(discord.ui.View):
         self.filename   = filename
 
     @discord.ui.button(label="Upscale (1.5×)", style=discord.ButtonStyle.secondary)
-    async def upscale_square(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self._queue_and_run(interaction, "512x512")
+    async def upscale(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        progress_msg = interaction.message
+        await progress_msg.edit(view=None)
+        embed        = progress_msg.embeds[0]
+        await progress_msg.edit(embed=embed, attachments=[])
 
-    # @discord.ui.button(label="Portrait (1.5×)", style=discord.ButtonStyle.secondary)
-    # async def upscale_portrait(self, interaction: discord.Interaction, button: discord.ui.Button):
-    #     await self._queue_and_run(interaction, "512x768")
+        # ── 1️⃣ Show queue position immediately ──
+        pending_messages.append(progress_msg)
+        pos = len(pending_messages)
+        embed.title       = f"🆙 Upscaling 🆙"
+        embed.color=discord.Color.blurple()
+        embed.description = f"⏳ You are #{pos} in queue. Please wait…"
+        embed.set_footer(text="")               # clear any old footer
+        await progress_msg.edit(embed=embed, attachments=[])
 
-    # @discord.ui.button(label="Landscape (1.5×)", style=discord.ButtonStyle.secondary)
-    # async def upscale_landscape(self, interaction: discord.Interaction, button: discord.ui.Button):
-    #     await self._queue_and_run(interaction, "768x512")
-
-    async def _queue_and_run(self, interaction: discord.Interaction, size_str: str):
-        session = requests.Session()
-        # 1️⃣ enqueue
-        await interaction.response.send_message(
-            f"⏳ You are #{len(pending_messages)+1} in queue. Please wait…",
-        )
-        queue_msg = await interaction.original_response()
-        pending_messages.append(queue_msg)
-
+        # ── 2️⃣ Wait your turn ──
         async with generation_lock:
-            # update everyone’s position
+            # remove self, update everyone else
             pending_messages.pop(0)
             for idx, m in enumerate(pending_messages, start=1):
-                await m.edit(content=f"⏳ You are #{idx} in queue. Please wait…")
+                e = m.embeds[0]
+                e.description = f"⏳ You are #{idx} in queue. Please wait…"
+                e.set_footer(text="")
+                await m.edit(embed=e, attachments=[])
 
-            # 2️⃣ start actual upscale, repurpose queue_msg
-            progress_msg = queue_msg
-            # base_w, base_h = map(int, size_str.split("x"))
-            base_w = self.width
-            base_h = self.height
+            
+            # ── 3️⃣ It’s your turn—swap into the real upscale embed ──
+            await progress_msg.edit(embed=embed, attachments=[])
+            base_w, base_h = self.width, self.height
             target_w = int(base_w * HR_SCALE)
             target_h = int(base_h * HR_SCALE)
-
-            # initial embed
-            embed = discord.Embed(
-                title=f"🆙 Upscaling to {target_w}×{target_h} 🆙",
-                color=discord.Color.blurple(),
-                # description="\n".join([
-                #     f"**Seed:**\n```{self.seed}```"
-                # ])
-            )
+            embed.title       = f"🆙 Upscaling to {target_w}×{target_h} 🆙"
+            embed.description="\n".join([
+                f"**Prompt:**\n```{self.prompt}```",
+                f"**Model:**\n```{self.model}```"
+            ])
             embed.set_footer(text=f"Upscaling... 0.0% • ETA: --s • {target_w}×{target_h}")
-            await progress_msg.edit(content="", embed=embed)
+            await progress_msg.edit(embed=embed)
 
-            # 3️⃣ fire and poll
-            loop  = asyncio.get_running_loop()
-            start = time.time()
+            # ── 4️⃣ Run img2img + live‐progress (same as before) ──
+            session = requests.Session()
+            loop    = asyncio.get_running_loop()
+            start   = time.time()
+
+            # load init image
+            path = os.path.join("images", self.filename)
+            with open(path, "rb") as f:
+                init_b64 = base64.b64encode(f.read()).decode()
+
             payload = {
-                "init_images":[f"data:image/png;base64,{base64.b64encode(open(os.path.join('images', self.filename),'rb').read()).decode()}"],
+                "init_images": [f"data:image/png;base64,{init_b64}"],
                 "prompt": self.prompt,
                 "negative_prompt": self.neg_prompt,
                 "seed": self.seed,
@@ -235,39 +237,40 @@ class UpscaleButton(discord.ui.View):
                 "height": target_h,
                 "override_settings": {"sd_model_checkpoint": self.model}
             }
-            task = loop.run_in_executor(None, lambda: session.post(
-                f"{SD_API_URL}/sdapi/v1/img2img", json=payload, timeout=999
-            ))
+
+            task    = loop.run_in_executor(
+                None,
+                lambda: session.post(f"{SD_API_URL}/sdapi/v1/img2img", json=payload, timeout=999)
+            )
             prog_url = f"{SD_API_URL}/sdapi/v1/progress?skip_current_image=false"
 
             while not task.done():
                 pr  = session.get(prog_url, timeout=10).json()
-                pct = pr.get("progress",0.)*100
-                eta = int(pr.get("eta_relative",0))
+                pct = pr.get("progress", 0.0) * 100
+                eta = int(pr.get("eta_relative", 0))
                 embed.set_footer(text=f"Upscaling... {pct:.1f}% • ETA: {eta}s • {target_w}×{target_h}")
 
-                if img := pr.get("current_image"):
-                    prev = base64.b64decode(img.split(",",1)[-1])
-                    file = discord.File(io.BytesIO(prev), filename="preview.png")
+                if img_data := pr.get("current_image"):
+                    preview = base64.b64decode(img_data.split(",",1)[-1])
+                    preview_file = discord.File(io.BytesIO(preview), filename="preview.png")
                     embed.set_image(url="attachment://preview.png")
-                    await progress_msg.edit(embed=embed, attachments=[file])
+                    await progress_msg.edit(embed=embed, attachments=[preview_file])
                 else:
                     await progress_msg.edit(embed=embed)
 
                 await asyncio.sleep(2)
 
-            # 4️⃣ final result
+            # ── 5️⃣ Final image ──
             resp = task.result(); resp.raise_for_status()
-            data     = resp.json()
-            final    = base64.b64decode(data["images"][0])
-            duration = time.time() - start
+            final_bytes = base64.b64decode(resp.json()["images"][0])
+            duration    = time.time() - start
 
-            file = discord.File(io.BytesIO(final), filename="upscaled.png")
+            final_file = discord.File(io.BytesIO(final_bytes), filename="upscaled.png")
             embed.set_image(url="attachment://upscaled.png")
             embed.set_footer(text=f"Seed: {self.seed} • Time: {duration:.1f}s • {target_w}×{target_h}")
-            await progress_msg.edit(embed=embed, attachments=[file])
+            await progress_msg.edit(embed=embed, attachments=[final_file])
 
-        session.close()
+            session.close()
 
 
 @bot.tree.command(name="imagine", description="Generate an image using Stable Diffusion")
@@ -409,6 +412,7 @@ async def imagine(
 
         view = UpscaleButton(used_seed, model, prompt, NEG_PROMPT, width, height, fname)
         await progress_msg.edit(embed=embed, attachments=[file], view=view)
+        #await progress_msg.edit(embed=embed, attachments=[file])
 
     session.close()
 
