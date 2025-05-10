@@ -534,7 +534,7 @@ async def on_message(message):
         return
     user_id = str(message.author.id)
     if user_id not in conversation_history:
-        print("New user detected.")
+        #print("New user detected.")
         conversation_history[user_id] = [keys.SYSTEM_MESSAGE]
         conversation_history[user_id].append({
             "role": "user",
