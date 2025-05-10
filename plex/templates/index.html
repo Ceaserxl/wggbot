@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to MyFlix</title>
+  <!-- Google Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #141414;
+      --nav-bg: rgba(20,20,20,0.85);
+      --accent: #e50914;
+      --text-main: #f5f5f1;
+      --transition: 0.3s;
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{
+      background:var(--bg);
+      color:var(--text-main);
+      font-family:'Inter',sans-serif;
+      display:flex;
+      flex-direction:column;
+      min-height:100vh;
+      text-align:center;
+    }
+    nav{
+      position:sticky;top:0;
+      background:var(--nav-bg);
+      backdrop-filter:blur(8px);
+      padding:1rem 2rem;
+      display:flex;
+      align-items:center;
+      z-index:10;
+      justify-content:center;
+    }
+    nav h1{
+      color:var(--accent);
+      font-size:1.6rem;
+    }
+    main{
+      flex:1;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:2rem;
+    }
+    .btn {
+      background:var(--accent);
+      color:#000;
+      padding:1rem 2rem;
+      font-size:1.25rem;
+      font-weight:600;
+      border:none;
+      border-radius:6px;
+      cursor:pointer;
+      text-decoration:none;
+      transition:transform var(--transition),filter var(--transition);
+    }
+    .btn:hover {
+      transform:scale(1.05);
+      filter:brightness(1.1);
+    }
+    footer{
+      background:var(--nav-bg);
+      padding:1rem 0;
+      font-size:0.9rem;
+      color:var(--text-main);
+    }
+    @media(max-width:600px){.btn{width:100%;max-width:300px}}
+  </style>
+</head>
+<body>
+  <nav>
+    <h1>MyFlix</h1>
+  </nav>
+  <main>
+    <a href="/catalog.html" class="btn">Movie Catalog</a>
+  </main>
+  <footer>
+    MyFlix &copy; 2025
+  </footer>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Movie Library</title>
+  <!-- Google Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #141414;
+      --nav-bg: rgba(20,20,20,0.85);
+      --card-bg: #1f1f1f;
+      --card-hover: #2a2a2a;
+      --accent: #e50914;
+      --text-main: #f5f5f1;
+      --text-secondary: #b3b3b3;
+      --transition: 0.3s;
+    }
+    *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+    body { background:var(--bg); color:var(--text-main); font-family:'Inter',sans-serif; display:flex; flex-direction:column; min-height:100vh; }
+    nav { position:sticky; top:0; background:var(--nav-bg); backdrop-filter:blur(8px); padding:1rem 2rem; display:flex; align-items:center; z-index:10; }
+    nav .logo { text-decoration:none; }
+    nav .logo h1 { color:var(--accent); font-size:1.6rem; margin-right:1rem; }
+    nav input[type=search] { background:#333; border:none; border-radius:4px; padding:0.5rem; color:var(--text-main); font-size:1rem; width:250px; transition:width var(--transition); flex-grow:1; }
+    nav input[type=search]:focus { width:350px; outline:none; }
+    #letter-nav { display:flex; flex-wrap:wrap; gap:0.5rem; padding:1rem 2rem; background:var(--bg); }
+    #letter-nav button { background:#333; border:none; border-radius:4px; padding:0.4rem 0.8rem; color:var(--text-main); cursor:pointer; transition:background var(--transition), transform var(--transition); }
+    #letter-nav button.active, #letter-nav button:hover { background:var(--accent); color:#000; transform:scale(1.1); }
+    main { flex:1; padding:1rem 2rem; overflow-y:auto; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:1rem; }
+    .card, .skeleton-card { background:var(--card-bg); border-radius:6px; overflow:hidden; position:relative; cursor:pointer; }
+    .card { transition:transform var(--transition),filter var(--transition); animation:fadeIn 0.5s ease forwards; opacity:0; }
+    .card:hover { transform:scale(1.05); filter:brightness(1.1); }
+    .card img { width:100%; display:block; aspect-ratio:2/3; object-fit:cover; background:#2f2f2f; }
+    .overlay { position:absolute; bottom:0; left:0; width:100%; padding:0.6rem; background:linear-gradient(transparent,rgba(0,0,0,0.9)); color:var(--text-main); }
+    .overlay .title { font-size:0.95rem; font-weight:600; line-height:1.2; }
+    .overlay .year { font-size:0.75rem; color:var(--text-secondary); margin-top:0.2rem; }
+    .skeleton-card { height:210px; background:#2f2f2f; position:relative; overflow:hidden; }
+    .skeleton-card::before { content:''; position:absolute; top:0; left:-150px; width:150px; height:100%; background:linear-gradient(90deg,transparent,rgba(255,255,255,0.1),transparent); animation:shimmer 1.5s infinite; }
+    @keyframes shimmer { 0% { left:-150px; } 100% { left:100%; } }
+    @keyframes fadeIn { to { opacity:1; } }
+    footer { background:var(--nav-bg); padding:1rem 2rem; text-align:center; font-size:0.9rem; color:var(--text-secondary); }
+    @media(max-width:600px){ nav input[type=search]{ width:150px; } main{ padding:0.5rem; } }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/" class="logo"><h1>MyFlix</h1></a>
+    <input type="search" id="search" placeholder="Search movies..." />
+  </nav>
+  <div id="letter-nav"></div>
+  <main>
+    <div id="skeleton" class="grid"></div>
+    <div class="grid" id="content"></div>
+  </main>
+  <footer>MyFlix &copy; 2025</footer>
+  <script>
+    const TOKEN = '{{ plex_token }}', URL = '{{ plex_url }}';
+    const content = document.getElementById('content');
+    const skeleton = document.getElementById('skeleton');
+    const searchInput = document.getElementById('search');
+    const letterNav = document.getElementById('letter-nav');
+    let allMovies = [];
+
+    function showSkeleton(count=12) {
+      skeleton.innerHTML = '';
+      content.style.display = 'none';
+      skeleton.style.display = 'grid';
+      for (let i = 0; i < count; i++) {
+        const div = document.createElement('div');
+        div.className = 'skeleton-card';
+        skeleton.appendChild(div);
+      }
+    }
+
+    function hideSkeleton() {
+      skeleton.style.display = 'none';
+      content.style.display = 'grid';
+    }
+
+    async function loadMovies() {
+      showSkeleton();
+      try {
+        const res = await fetch('/library/section/1');
+        const data = await res.json();
+        allMovies = (data.MediaContainer?.Video || []).slice()
+          .sort((a, b) => a['@title'].localeCompare(b['@title']));
+        renderLetters();
+        render(allMovies);
+      } catch (e) {
+        content.innerHTML = '<p>Error loading movies.</p>';
+      } finally {
+        hideSkeleton();
+      }
+    }
+
+    function renderLetters() {
+      const letters = [...new Set(allMovies.map(m => m['@title'][0].toUpperCase()))];
+      letterNav.innerHTML = '';
+      letters.forEach(l => {
+        const btn = document.createElement('button');
+        btn.textContent = l;
+        btn.addEventListener('click', () => {
+          letterNav.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          render(allMovies.filter(m => m['@title'].startsWith(l)));
+        });
+        letterNav.appendChild(btn);
+      });
+    }
+
+    function render(movies) {
+      content.innerHTML = '';
+      movies.forEach(v => {
+        const card = document.createElement('a');
+        card.href = `/watch/${v['@ratingKey']}`;
+        card.className = 'card';
+
+        const img = document.createElement('img');
+        img.loading = 'lazy';
+        img.src = `${URL}/library/metadata/${v['@ratingKey']}/thumb?X-Plex-Token=${TOKEN}&width=300`;
+        img.alt = v['@title'];
+        card.appendChild(img);
+
+        const ov = document.createElement('div');
+        ov.className = 'overlay';
+        ov.innerHTML = `<div class='title'>${v['@title']}</div><div class='year'>${v['@year']}</div>`;
+        card.appendChild(ov);
+
+        content.appendChild(card);
+      });
+    }
+
+    searchInput.addEventListener('input', e => {
+      letterNav.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+      const q = e.target.value.toLowerCase();
+      render(allMovies.filter(m => m['@title'].toLowerCase().includes(q)));
+    });
+
+    document.addEventListener('DOMContentLoaded', loadMovies);
+  </script>
+</body>
+</html>

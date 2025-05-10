@@ -1,0 +1,26 @@
+{
+    "content": "Help Message Introduction",
+    "embeds": [
+        {
+            "title": "  **Hello User!**  |  **WheresGangBot**  |  **Who am I?**  ",
+            "description": "I am WheresGangBot. I am powered by OpenAI's ChatGPT.\n",
+            "color": 16776960,
+            "fields": [
+                {"name": "What I can do", "value": "I have the ability to execute the below commands as well as have intelligent conversations in our DM's and can answer simple messages in channel!\n", "inline": false},
+                {"name": "\u200B", "value": "", "inline": false},
+                {"name": "/help", "value": "```Shows this help message.```", "inline": true},
+                {"name": "/ping", "value": "```Returns the bot's latency.```", "inline": true},
+                {"name": "/chat", "value": "```Chat with bot in guild channel.```", "inline": true},
+                {"name": "/image {prompt}", "value": "```Generates an image from a prompt.```", "inline": true},
+                {"name": "/play {link}", "value": "```Play a song from YouTube.```", "inline": true},
+                {"name": "/playlist {link}", "value": "```Plays first 5 songs from YouTube playlist.```", "inline": true},
+                {"name": "/skip", "value": "```Skips the current song.```", "inline": true},
+                {"name": "/queue", "value": "```Shows the current queue.```", "inline": true},
+                {"name": "/disconnect", "value": "```Disconnect the bot from voice chat. Also clears the que```", "inline": true},
+                {"name": "\u200B", "value": "", "inline": false},
+                {"name": "", "value": "Bot developed and maintained by <@233850059018600448>\nI am looking for supporters please reach out if you'd like to donate.", "inline": false}
+            ],
+            "footer": {"text": ""}
+        }
+    ]
+}

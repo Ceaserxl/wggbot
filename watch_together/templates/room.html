@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Watch Together - {{ movie_name }}</title>
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    <style>
+        body {
+            background-color: #2C2F33; /* Discord grey */
+            color: #FFFFFF;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            flex-direction: column;
+        }
+        .video-container {
+            position: relative;
+            width: 600px;
+            text-align: center;
+        }
+        video {
+            width: 100%;
+            border: 2px solid #000000; /* Black border */
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+        #viewer-count {
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 18px;
+            margin-bottom: 10px;
+            display: inline-block;
+        }
+    </style>
+    <script type="text/javascript" charset="utf-8">
+        document.addEventListener("DOMContentLoaded", () => {
+            const roomId = window.location.pathname.split("/").pop();
+            const video = document.getElementById('video');
+            const socket = io(window.location.origin);  // Adjust this if your Flask app runs elsewhere
+            const viewerCount = document.getElementById('viewer-count');
+
+            let syncing = false; // Flag to avoid rapid toggling
+
+            fetch(`/get_furthest_time/${roomId}`)
+                .then(response => response.json())
+                .then(data => {
+                    video.src = "{{ video_url }}";
+                    video.currentTime = data.currentTime;
+                    if (data.playing) {
+                        video.play();
+                    } else {
+                        video.pause();
+                    }
+                });
+
+            socket.on('connect', () => {
+                socket.emit('join', { room: roomId });
+                setInterval(() => {
+                    socket.emit('heartbeat');
+                }, 10000);  // Send heartbeat every 10 seconds
+            });
+
+            video.addEventListener('play', () => {
+                if (!syncing) {
+                    socket.emit('play', { room: roomId });
+                }
+            });
+
+            video.addEventListener('pause', () => {
+                if (!syncing) {
+                    socket.emit('pause', { room: roomId });
+                }
+            });
+
+            video.addEventListener('timeupdate', () => {
+                if (!syncing) {
+                    socket.emit('sync', { room: roomId, currentTime: video.currentTime });
+                }
+            });
+
+            socket.on('play', () => {
+                if (video.paused) {
+                    syncing = true;
+                    video.play().finally(() => {
+                        syncing = false;
+                    });
+                }
+            });
+
+            socket.on('pause', () => {
+                if (!video.paused) {
+                    syncing = true;
+                    video.pause();
+                    syncing = false;
+                }
+            });
+
+            socket.on('sync', (data) => {
+                if (Math.abs(video.currentTime - data.currentTime) > 0.5) {
+                    syncing = true;
+                    video.currentTime = data.currentTime;
+                    syncing = false;
+                }
+                if (data.playing && video.paused) {
+                    syncing = true;
+                    video.play().finally(() => {
+                        syncing = false;
+                    });
+                } else if (!data.playing && !video.paused) {
+                    syncing = true;
+                    video.pause();
+                    syncing = false;
+                }
+            });
+
+            socket.on('viewers', (data) => {
+                viewerCount.textContent = `Viewers: ${data.count}`;
+            });
+        });
+    </script>
+</head>
+<body>
+    <div class="video-container">
+        <div id="viewer-count">Viewers: 0</div>
+        <video id="video" controls></video>
+    </div>
+</body>
+</html>

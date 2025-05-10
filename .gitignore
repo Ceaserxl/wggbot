@@ -1,0 +1,14 @@
+# Ignore Discord-related files or folders
+discord/
+
+# Ignore saved/generated image files
+images/
+
+# Python cache & virtualenv (optional but recommended)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+env/
+venv/
+.env
