@@ -365,10 +365,10 @@ async def imagine(
             "override_settings": {"sd_model_checkpoint": model}
         }
         if refiner:
-            payload["override_settings"].update({
+            payload.update({
                 "enable_refiner": True,
+                "refiner_switch_at": 0.8,
                 "refiner_checkpoint": "realDream_sdxlRealismRefinerV2.safetensors",
-                "refiner_switch_at": 0.8
             })
 
         task = loop.run_in_executor(None, lambda: session.post(
