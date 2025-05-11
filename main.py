@@ -184,8 +184,7 @@ class UpscaleButton(discord.ui.View):
         await progress_msg.edit(view=None)
         embed        = progress_msg.embeds[0]
         self.clear_items()
-        self.add_item(self.delete)
-        await progress_msg.edit(embed=embed, attachments=[], view=self)
+        await progress_msg.edit(embed=embed, attachments=[])
         
         # ── 1️⃣ Show queue position immediately ──
         pending_messages.append(progress_msg)
@@ -274,7 +273,8 @@ class UpscaleButton(discord.ui.View):
             final_file = discord.File(io.BytesIO(final_bytes), filename="upscaled.png")
             embed.set_image(url="attachment://upscaled.png")
             embed.set_footer(text=f"Seed: {self.seed} • Time: {duration:.1f}s • {target_w}×{target_h}")
-            await progress_msg.edit(embed=embed, attachments=[final_file])
+            self.add_item(self.delete)
+            await progress_msg.edit(embed=embed, attachments=[final_file], view=self)
 
             session.close()
 
