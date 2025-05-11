@@ -172,18 +172,21 @@ class UpscaleButton(discord.ui.View):
         self.width      = width
         self.height     = height
         self.filename   = filename
+
     @discord.ui.button(label="🗑 Delete", style=discord.ButtonStyle.danger)
     async def delete(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.message.delete()
-        
+
     @discord.ui.button(label="Upscale (1.5×)", style=discord.ButtonStyle.secondary)
     async def upscale(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         progress_msg = interaction.message
         await progress_msg.edit(view=None)
         embed        = progress_msg.embeds[0]
-        await progress_msg.edit(embed=embed, attachments=[])
-
+        self.clear_items()
+        self.add_item(self.delete)
+        await progress_msg.edit(embed=embed, attachments=[], view=self)
+        
         # ── 1️⃣ Show queue position immediately ──
         pending_messages.append(progress_msg)
         pos = len(pending_messages)
