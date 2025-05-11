@@ -235,7 +235,7 @@ class UpscaleButton(discord.ui.View):
                 "negative_prompt": self.neg_prompt,
                 "seed": self.seed,
                 "steps": 25,
-                "sampler_name": "DPM++ 2M Karras",
+                "sampler_name": "DPM++ 2M",
                 "scheduler": "Karras",
                 "denoising_strength": 0.7,
                 "width": target_w,
