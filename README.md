@@ -38,8 +38,7 @@ SD_API_URL=http://your-stable-diffusion-url:port
 1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/yourusername/your-repo.git
-   cd your-repo
+   git clone https://github.com/Ceaserxl/WGGBot.git
    ```
 
 2. **Create and activate a virtual environment**
