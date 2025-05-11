@@ -39,6 +39,7 @@ SD_API_URL=http://your-stable-diffusion-url:port
 
    ```bash
    git clone https://github.com/Ceaserxl/WGGBot.git
+   cd WGGBot
    ```
 
 2. **Create and activate a virtual environment**
