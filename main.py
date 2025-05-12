@@ -160,8 +160,8 @@ async def on_message(message):
         await handle_dm_message(message)
         return
 
-    if message.channel.id == OLLAMA_CHANNEL_ID:
-        bot.loop.create_task(handle_ollama_response(message))  # isolated task per message
+    # if message.channel.id == OLLAMA_CHANNEL_ID:
+    #     bot.loop.create_task(handle_ollama_response(message))  # isolated task per message
 
 async def handle_ollama_response(message):
     async with message.channel.typing():
