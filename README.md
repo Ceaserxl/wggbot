@@ -1,8 +1,7 @@
 # Discord Bot + ChatGPT + Plex Integration
 
 This project is a multi-feature Discord bot that integrates with:  
-- OpenAI ChatGPT  
-- Plex Media Server  
+- OpenAI ChatGPT / Dall-E-3
 - Stable Diffusion (for image generation)
 
 ---
@@ -18,10 +17,6 @@ BETA_DISCORD_TOKEN=your_beta_bot_token
 
 # OpenAI API Key
 OPENAI_API_KEY=your_openai_key
-
-# Plex Media Server
-PLEX_URL=http://your-plex-url:port
-PLEX_TOKEN=your_plex_token
 
 # Application & AI Settings
 APP_URL=your_app_ip_or_url
@@ -72,7 +67,6 @@ SD_API_URL=http://your-stable-diffusion-url:port
 ## 🤖 Features
 
 * **ChatGPT Integration**: Respond to Discord messages using OpenAI.
-* **Plex Queries**: Fetch and display media server info.
 * **Stable Diffusion**: Generate images on demand.
 * **Live & Beta Modes**: Switch tokens to test in staging vs production.
 
