@@ -17,8 +17,8 @@ PLEX_TOKEN         = os.getenv('PLEX_TOKEN')
 APP_URL            = os.getenv('APP_URL')
 SD_API_URL         = os.getenv('SD_API_URL')
 OLLAMA_IP          = os.getenv('OLLAMA_IP')
-OLLAMA_CHANNEL_ID = 1371303451543208016  # Replace with your allowed channel ID
-
+OLLAMA_CHANNEL_ID  = int(os.getenv('OLLAMA_CHANNEL_ID'))
+OLLAMA_MODEL       = os.getenv('OLLAMA_MODEL')
 
 # ── Platform-Specific Overrides ─────────────────────────────────────────
 if platform.system() == 'Windows':

@@ -13,8 +13,10 @@ SYSTEM_CONTEXT = (
     "and only mention the limit if trimming is required."
 )
 
+
+
 # ── Ollama Query Handler ────────────────────────────────────────────────
-async def query_ollama(prompt: str, model: str = "artifish/llama3.2-uncensored:latest") -> str:
+async def query_ollama(prompt: str, model: str = keys.OLLAMA_MODEL) -> str:
     try:
         full_prompt = f"{SYSTEM_CONTEXT}\n\nUser: {prompt}"
         async with aiohttp.ClientSession() as session:

@@ -22,10 +22,9 @@ from resources.music_handling import (
 )
 from resources.stable_diffusion import UpscaleButton, imagine_command
 from resources.ollama import query_ollama
-from resources.keys import OLLAMA_CHANNEL_ID
 
-# ── Launch Website Flag ──────────────────────────────────────────────────
-website = False
+# ── Constants ────────────────────────────────────────────────────────────
+OLLAMA_CHANNEL_ID = keys.OLLAMA_CHANNEL_ID
 
 # ── Logging Setup ────────────────────────────────────────────────────────
 t = logging.getLogger()
@@ -161,7 +160,7 @@ async def on_message(message):
         return
 
     # if message.channel.id == OLLAMA_CHANNEL_ID:
-    #     bot.loop.create_task(handle_ollama_response(message))  # isolated task per message
+    #     bot.loop.create_task(handle_ollama_response(message))
 
 async def handle_ollama_response(message):
     async with message.channel.typing():
