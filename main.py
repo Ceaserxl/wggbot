@@ -21,6 +21,8 @@ from resources.music_handling import (
     handle_queue_command
 )
 from resources.stable_diffusion import UpscaleButton, imagine_command
+from resources.ollama import query_ollama
+from resources.keys import OLLAMA_CHANNEL_ID
 
 # ── Launch Website Flag ──────────────────────────────────────────────────
 website = False
@@ -35,48 +37,6 @@ intents.messages = True
 intents.guilds = True
 intents.voice_states = True
 bot = commands.Bot(command_prefix='/', intents=intents)
-
-# ── Configuration ────────────────────────────────────────────────────────
-OLLAMA_CHANNEL_ID = 1371303451543208016  # Replace with your allowed channel ID
-
-# ── Helper Function ──────────────────────────────────────────────────────
-SYSTEM_CONTEXT = (
-    "You are a helpful Discord bot. Format all responses using Discord-supported Markdown to enhance clarity. "
-    "Use section headings, bullet points, numbered lists, and code blocks where appropriate. "
-    "Organize answers with clear titles and sections when explaining complex topics. "
-    "Keep the response under Discord's 2000-character limit. If the content is too long, summarize it intelligently "
-    "and only mention the limit if trimming is required."
-)
-
-
-async def query_ollama(prompt: str, model: str = "artifish/llama3.2-uncensored:latest") -> str:
-    try:
-        full_prompt = f"{SYSTEM_CONTEXT}\n\nUser: {prompt}"
-        async with aiohttp.ClientSession() as session:
-            # 🔍 Health check
-            try:
-                async with session.get(f"http://{keys.OLLAMA_IP}:11434/api/tags", timeout=3) as health_resp:
-                    if health_resp.status != 200:
-                        return "❌ Ollama server is offline."
-            except asyncio.TimeoutError:
-                return "❌ Ollama server is offline."
-            except Exception:
-                return "❌ Ollama server is offline."
-
-            # 🧠 Generate response
-            async with session.post(
-                f"http://{keys.OLLAMA_IP}:11434/api/generate",
-                json={"model": model, "prompt": full_prompt, "stream": False},
-                headers={"Content-Type": "application/json"}
-            ) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    return data.get("response", "❌ No response from Ollama.")
-                else:
-                    return f"❌ Ollama API error"
-    except Exception as e:
-        return "❌ Ollama server is offline."
-
 
 # ── Bot Commands ─────────────────────────────────────────────────────────
 @bot.tree.command(name="ping", description="Returns the bot's latency.")
@@ -207,6 +167,7 @@ async def handle_ollama_response(message):
     async with message.channel.typing():
         response = await query_ollama(message.content)
         await message.reply(response[:2000])
+
 # ── Main Entrypoint ─────────────────────────────────────────────────────
 if __name__ == '__main__':
     bot.run(keys.DISCORD_TOKEN)
