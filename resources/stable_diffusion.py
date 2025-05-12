@@ -1,5 +1,6 @@
 # resources/stable_diffusion.py
 
+# ── Imports ─────────────────────────────────────────────────────────────
 import os, io, time, base64, json, asyncio, requests
 from datetime import datetime
 import discord
@@ -7,12 +8,17 @@ from discord import app_commands
 from discord.ui import View, Button
 from resources import keys
 
+# ── Configuration ───────────────────────────────────────────────────────
 SD_API_URL      = keys.SD_API_URL
 HR_SCALE        = 1.5
-NEG_PROMPT      = "low quality, blurry, deformed, bad anatomy, bad quality, worst quality, worst detail, sketch, signature, watermark, username, patreon"
+NEG_PROMPT      = (
+    "low quality, blurry, deformed, bad anatomy, bad quality, worst quality, "
+    "worst detail, sketch, signature, watermark, username, patreon"
+)
 generation_lock = asyncio.Lock()
 pending_messages: list[discord.Message] = []
 
+# ── Upscale Button View ─────────────────────────────────────────────────
 class UpscaleButton(View):
     def __init__(self, seed, model, prompt, neg_prompt, width, height, filename):
         super().__init__(timeout=None)
@@ -37,23 +43,24 @@ class UpscaleButton(View):
         self.clear_items()
         await progress_msg.edit(embed=embed, attachments=[])
 
+        # Add to queue
         pending_messages.append(progress_msg)
         pos = len(pending_messages)
         embed.title = "🆙 Upscaling 🆙"
         embed.color = discord.Color.blurple()
         embed.description = f"⏳ You are #{pos} in queue. Please wait…"
         embed.set_footer(text="")
-        await progress_msg.edit(embed=embed, attachments=[])
+        await progress_msg.edit(embed=embed)
 
+        # Process queue
         async with generation_lock:
             pending_messages.pop(0)
             for idx, m in enumerate(pending_messages, start=1):
                 e = m.embeds[0]
                 e.description = f"⏳ You are #{idx} in queue. Please wait…"
                 e.set_footer(text="")
-                await m.edit(embed=e, attachments=[])
+                await m.edit(embed=e)
 
-            await progress_msg.edit(embed=embed, attachments=[])
             target_w = int(self.width * HR_SCALE)
             target_h = int(self.height * HR_SCALE)
             embed.title = f"🆙 Upscaling to {target_w}×{target_h} 🆙"
@@ -64,14 +71,15 @@ class UpscaleButton(View):
             embed.set_footer(text=f"Upscaling... 0.0% • ETA: --s • {target_w}×{target_h}")
             await progress_msg.edit(embed=embed)
 
+            # Prepare image
             session = requests.Session()
             loop = asyncio.get_running_loop()
             start = time.time()
-
             path = os.path.join("images", self.filename)
             with open(path, "rb") as f:
                 init_b64 = base64.b64encode(f.read()).decode()
 
+            # Create payload
             payload = {
                 "init_images": [f"data:image/png;base64,{init_b64}"],
                 "prompt": self.prompt,
@@ -86,6 +94,7 @@ class UpscaleButton(View):
                 "override_settings": {"sd_model_checkpoint": self.model}
             }
 
+            # Submit task
             task = loop.run_in_executor(None, lambda: session.post(f"{SD_API_URL}/sdapi/v1/img2img", json=payload, timeout=999))
             prog_url = f"{SD_API_URL}/sdapi/v1/progress?skip_current_image=false"
 
@@ -105,6 +114,7 @@ class UpscaleButton(View):
 
                 await asyncio.sleep(2)
 
+            # Final result
             resp = task.result(); resp.raise_for_status()
             final_bytes = base64.b64decode(resp.json()["images"][0])
             duration = time.time() - start
@@ -114,10 +124,9 @@ class UpscaleButton(View):
             embed.set_footer(text=f"Seed: {self.seed} • Time: {duration:.1f}s • {target_w}×{target_h}")
             self.add_item(self.delete)
             await progress_msg.edit(embed=embed, attachments=[final_file], view=self)
-
             session.close()
 
-
+# ── /imagine Command Logic ──────────────────────────────────────────────
 async def imagine_command(interaction: discord.Interaction, prompt: str, size: str, model: str, refiner: bool, seed: int):
     session = requests.Session()
     await interaction.response.defer()
@@ -132,8 +141,7 @@ async def imagine_command(interaction: discord.Interaction, prompt: str, size: s
         session.get(f"{SD_API_URL}/sdapi/v1/sd-models", timeout=2).raise_for_status()
     except requests.RequestException:
         return await interaction.followup.send(
-            "⚠️ Stable Diffusion server is currently offline. Please try again later.",
-            ephemeral=True
+            "⚠️ Stable Diffusion server is currently offline. Please try again later.", ephemeral=True
         )
 
     await interaction.followup.send(f"⏳ You are #{len(pending_messages)+1} in queue. Please wait…")

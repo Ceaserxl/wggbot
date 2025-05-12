@@ -1,24 +1,10 @@
 # main.py
 
 # ── Imports ─────────────────────────────────────────────────────────────
-import os, io, base64, requests, asyncio
-import sys
-import json
-import subprocess
-import requests
-import xmltodict
-import time
-import hashlib
 import logging
-import platform
-from datetime import datetime
-from flask import Flask, render_template, jsonify
 import discord
 from discord import app_commands
 from discord.ext import commands
-from discord import ui
-from discord.ui import View, Button
-
 from resources import keys
 from resources.chatgpt_interaction import (
     handle_dm_message,
@@ -63,44 +49,6 @@ async def chat(interaction: discord.Interaction, prompt: str):
     else:
         await interaction.response.defer()
         await handle_chat_command(interaction, prompt, bot)
-
-@bot.tree.command(name="image", description="Generate an image using Dall-E.")
-async def image(interaction: discord.Interaction, prompt: str):
-    print("Executing /image")
-    await interaction.response.defer(thinking=True)
-    await generate_and_send_image(interaction, prompt)
-
-@bot.tree.command(name="imagine", description="Generate an image using Stable Diffusion")
-@app_commands.choices(
-    size=[
-        app_commands.Choice(name="Square",   value="512x512"),
-        app_commands.Choice(name="Portrait", value="512x768"),
-        app_commands.Choice(name="Landscape",value="768x512"),
-    ]
-)
-@app_commands.choices(
-    model=[
-        app_commands.Choice(name="dynavisionXLAllInOneStylized_releaseV0610Bakedvae",   value="dynavisionXLAllInOneStylized_releaseV0610Bakedvae"),
-        app_commands.Choice(name="waiNSFWIllustrious_v120",                             value="waiNSFWIllustrious_v120"),
-        app_commands.Choice(name="illustrij_v13",                                       value="illustrij_v13"),
-        app_commands.Choice(name="cyberrealisticPony_v11",                              value="cyberrealisticPony_v11"),
-        app_commands.Choice(name="illustriousRealismBy_v10",                            value="illustriousRealismBy_v10"),
-        app_commands.Choice(name="realDream_sdxlPony15",                                value="realDream_sdxlPony15"),
-        app_commands.Choice(name="realisticVisionV60B1_v51HyperVAE",                    value="realisticVisionV60B1_v51HyperVAE"),
-        app_commands.Choice(name="revAnimated_v2RebirthVAE",                            value="revAnimated_v2RebirthVAE"),
-        app_commands.Choice(name="dreamshaper_8",                                       value="dreamshaper_8"),
-        app_commands.Choice(name="disneyPixarCartoon_v10",                              value="disneyPixarCartoon_v10")
-    ]
-)
-async def imagine(
-    interaction: discord.Interaction,
-    prompt: str,
-    size: str = "512x512",
-    model: str = "dynavisionXLAllInOneStylized_releaseV0610Bakedvae",
-    refiner: bool = False,
-    seed: int = -1
-):
-    await imagine_command(interaction, prompt, size, model, refiner, seed)
 
 @bot.tree.command(name="play", description="Play a song from a YouTube link.")
 async def play(interaction: discord.Interaction, link: str):
@@ -154,6 +102,44 @@ async def disconnect(interaction: discord.Interaction):
     else:
         await interaction.response.defer()
         await handle_disconnect_command(interaction)
+
+@bot.tree.command(name="image", description="Generate an image using Dall-E.")
+async def image(interaction: discord.Interaction, prompt: str):
+    print("Executing /image")
+    await interaction.response.defer(thinking=True)
+    await generate_and_send_image(interaction, prompt)
+
+@bot.tree.command(name="imagine", description="Generate an image using Stable Diffusion")
+@app_commands.choices(
+    size=[
+        app_commands.Choice(name="Square",   value="512x512"),
+        app_commands.Choice(name="Portrait", value="512x768"),
+        app_commands.Choice(name="Landscape",value="768x512"),
+    ]
+)
+@app_commands.choices(
+    model=[
+        app_commands.Choice(name="dynavisionXLAllInOneStylized_releaseV0610Bakedvae",   value="dynavisionXLAllInOneStylized_releaseV0610Bakedvae"),
+        app_commands.Choice(name="waiNSFWIllustrious_v120",                             value="waiNSFWIllustrious_v120"),
+        app_commands.Choice(name="illustrij_v13",                                       value="illustrij_v13"),
+        app_commands.Choice(name="cyberrealisticPony_v11",                              value="cyberrealisticPony_v11"),
+        app_commands.Choice(name="illustriousRealismBy_v10",                            value="illustriousRealismBy_v10"),
+        app_commands.Choice(name="realDream_sdxlPony15",                                value="realDream_sdxlPony15"),
+        app_commands.Choice(name="realisticVisionV60B1_v51HyperVAE",                    value="realisticVisionV60B1_v51HyperVAE"),
+        app_commands.Choice(name="revAnimated_v2RebirthVAE",                            value="revAnimated_v2RebirthVAE"),
+        app_commands.Choice(name="dreamshaper_8",                                       value="dreamshaper_8"),
+        app_commands.Choice(name="disneyPixarCartoon_v10",                              value="disneyPixarCartoon_v10")
+    ]
+)
+async def imagine(
+    interaction: discord.Interaction,
+    prompt: str,
+    size: str = "512x512",
+    model: str = "dynavisionXLAllInOneStylized_releaseV0610Bakedvae",
+    refiner: bool = False,
+    seed: int = -1
+):
+    await imagine_command(interaction, prompt, size, model, refiner, seed)
 
 # ── Event Listeners ─────────────────────────────────────────────────────
 @bot.event

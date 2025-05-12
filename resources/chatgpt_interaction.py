@@ -2,8 +2,6 @@
 
 # ── Imports ─────────────────────────────────────────────────────────────
 import os
-import json
-import asyncio
 import requests
 from datetime import datetime
 from aiohttp import ClientSession
@@ -122,14 +120,16 @@ async def generate_and_send_image(interaction: discord.Interaction, prompt: str)
                     await download_image(image_url, file_path)
 
                     embed = discord.Embed(
-                        description=f"```\n{prompt}\n```\nModel: {keys.DALLE_MODEL}\nSize: {keys.DALLE_RESOLUTION}\nQuality: {keys.DALLE_QUALITY}\n"
-                    )
+                        title="🎨 ChatGPT | Dall-E-3 🎨",
+                        color=discord.Color.green(),
+                        description="\n".join([
+                            f"**Prompt:**\n```{prompt}```"
+                        ]))
+                    
                     file = discord.File(file_path, filename="image.png")
                     embed.set_image(url="attachment://image.png")
                     await interaction.followup.send(content=None, embed=embed, file=file)
 
-                    # Uncomment if you want to clean up files after sending
-                    # os.remove(file_path)
                 else:
                     await interaction.followup.send(content='No valid image generated.')
             else:
