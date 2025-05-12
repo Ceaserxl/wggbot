@@ -16,11 +16,13 @@ PLEX_URL           = os.getenv('PLEX_URL')
 PLEX_TOKEN         = os.getenv('PLEX_TOKEN')
 APP_URL            = os.getenv('APP_URL')
 SD_API_URL         = os.getenv('SD_API_URL')
+OLLAMA_IP          = os.getenv('OLLAMA_IP')
 
 # ── Platform-Specific Overrides ─────────────────────────────────────────
 if platform.system() == 'Windows':
     DISCORD_TOKEN = BETA_DISCORD_TOKEN
     SD_API_URL    = "http://127.0.0.1:7860"
+    OLLAMA_IP     = "localhost"
 else:
     DISCORD_TOKEN = LIVE_DISCORD_TOKEN
 
