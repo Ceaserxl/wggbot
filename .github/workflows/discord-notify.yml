@@ -1,21 +1,28 @@
 name: Notify Discord on Push
 
+# trigger on whatever events you need:
 on:
   push:
     branches:
-      - main      # or whichever branches you care about
+      - main
 
 jobs:
   discord:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Send Discord Notification
-        uses: Ilshidur/action-discord@v2
-        with:
-          webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          content: |
-            📢 **New push** to `${{ github.repository }}`  
-            • **Ref:** `${{ github.ref }}`  
-            • **Actor:** `${{ github.actor }}`  
-            • **Message:** `${{ github.event.head_commit.message }}`
+      - name: Send notification to Discord
+        # expose needed context as env vars:
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          REPO:   ${{ github.repository }}
+          REF:    ${{ github.ref_name }}
+          ACTOR:  ${{ github.actor }}
+          MSG:    ${{ github.event.head_commit.message }}
+        run: |
+          # build a JSON payload with a non-empty "content"
+          payload="{\"content\":\":rocket: Push to **${REPO}** on *${REF}* by **${ACTOR}**: ${MSG//\"/\\\"}\"}"
+          curl -X POST \
+               -H "Content-Type: application/json" \
+               -d "$payload" \
+               "$WEBHOOK"
