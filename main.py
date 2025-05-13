@@ -150,7 +150,7 @@ async def imagine(
 async def on_ready():
     print(f'Logged in as {bot.user}')
     await bot.tree.sync()
-
+ 
 @bot.event
 async def on_message(message):
     if message.author == bot.user:
