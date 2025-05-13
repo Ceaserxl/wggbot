@@ -155,7 +155,7 @@ async def on_ready():
 async def on_message(message):
     if message.author == bot.user:
         return
- 
+
     # DMs
     if isinstance(message.channel, discord.DMChannel):
         await handle_dm_message(message)
