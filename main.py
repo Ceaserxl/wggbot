@@ -4,6 +4,7 @@
 import asyncio
 import logging
 import aiohttp
+import platform
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -168,9 +169,11 @@ async def on_message(message):
         else message.channel.id
     )
 
-    if channel_id == OLLAMA_CHANNEL_ID:
-        bot.loop.create_task(handle_ollama_response(message))
-        return
+    # ── Platform-Specific Overrides ──────────────────────────────────────
+    if platform.system() == 'Windows':
+        if channel_id == OLLAMA_CHANNEL_ID:
+            bot.loop.create_task(handle_ollama_response(message))
+            return
 
     # if you have other on_message logic, call this to let commands still work
     await bot.process_commands(message)

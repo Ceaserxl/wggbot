@@ -7,7 +7,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 
 # ── Load Environment Variables ──────────────────────────────────────────
-load_dotenv()
+load_dotenv(override=True)
 
 LIVE_DISCORD_TOKEN = os.getenv('LIVE_DISCORD_TOKEN')
 BETA_DISCORD_TOKEN = os.getenv('BETA_DISCORD_TOKEN')

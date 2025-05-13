@@ -10,7 +10,7 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - name: Send pretty Discord embed
+      - name: Send Discord embed
         env:
           WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
           REPO:   ${{ github.repository }}

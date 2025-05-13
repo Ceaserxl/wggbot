@@ -2,7 +2,6 @@
 import aiohttp
 import asyncio
 import discord
-import uuid
 from resources import keys
 
 # ── Constants ───────────────────────────────────────────────────────────
@@ -10,8 +9,8 @@ SYSTEM_CONTEXT = (
     "You are a helpful and friendly Discord assistant. Speak in a warm, conversational tone, "
     "as if you’re talking to a colleague—use natural language, empathy, and occasional informal touches. "
     "Provide clear, concise answers and structure them with headings or bullet points when helpful, "
-    "but keep the overall feeling human and approachable. Stay under Discord’s 2000-character limit, "
-    "and if trimming is needed, summarize gracefully."
+    "but keep the overall feeling human and approachable. Stay under Discord’s 1500-character limit, "
+    "and if trimming is needed, summarize gracefully. Do not include any labels like 'Bot:' before your responses."
 )
 
 # ── State ────────────────────────────────────────────────────────────────
@@ -21,38 +20,37 @@ _initialized_threads = set()
 # ── Ollama Query ─────────────────────────────────────────────────────────
 async def query_ollama(prompt: str, model: str = keys.OLLAMA_MODEL) -> str:
     """
-    Sends the given prompt (already including any needed context) to Ollama.
+    Sends the given prompt to Ollama, first performing a health check.
     """
-    try:
-        async with aiohttp.ClientSession() as session:
-            # Health check
-            try:
-                async with session.get(
-                    f"http://{keys.OLLAMA_IP}:11434/api/tags", timeout=3
-                ) as health_resp:
-                    if health_resp.status != 200:
-                        return "❌ Ollama server is offline."
-            except (asyncio.TimeoutError, Exception):
+    async with aiohttp.ClientSession() as session:
+        # Health check + error handling
+        try:
+            health_resp = await session.get(
+                f"http://{keys.OLLAMA_IP}:11434/api/tags", timeout=3
+            )
+            if health_resp.status != 200:
                 return "❌ Ollama server is offline."
+        except (asyncio.TimeoutError, aiohttp.ClientError):
+            return "❌ Ollama server is offline."
 
-            # Generate response
-            async with session.post(
+        # Generate response
+        try:
+            resp = await session.post(
                 f"http://{keys.OLLAMA_IP}:11434/api/generate",
                 json={"model": model, "prompt": prompt, "stream": False},
                 headers={"Content-Type": "application/json"}
-            ) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    return data.get("response", "❌ No response from Ollama.")
-                else:
-                    return "❌ Ollama API error"
-    except Exception:
-        return "❌ Ollama server is offline."
+            )
+            if resp.status == 200:
+                data = await resp.json()
+                return data.get("response", "❌ No response from Ollama.")
+            return "❌ Ollama API error"
+        except (asyncio.TimeoutError, aiohttp.ClientError):
+            return "❌ Ollama server is offline."
 
 # ── Thread Context Helper ────────────────────────────────────────────────
-async def get_thread_context(channel: discord.abc.Messageable, limit: int = 100) -> str:
+async def get_thread_context(channel: discord.abc.Messageable, limit: int = 50) -> str:
     """
-    Fetch up to `limit` most recent messages (newest→oldest) in this channel/thread,
+    Fetch up to `limit` most recent messages (oldest→newest) in this channel/thread,
     and format them as:
         User: <content>
         Bot: <content>
@@ -69,20 +67,16 @@ async def handle_ollama_response(message: discord.Message):
     if isinstance(message.channel, discord.Thread):
         thread = message.channel
     else:
-        # Derive a unique title: slugify first line + short UUID
-        raw_title = message.content.splitlines()[0]
-        # Keep only alphanumeric and spaces, lowercase
-        slug = ''.join(c if c.isalnum() or c.isspace() else ' ' for c in raw_title)
-        slug = '-'.join(slug.lower().split())[:50]
-        suffix = uuid.uuid4().hex[:8]
-        title = f"{slug}-{suffix}" if slug else suffix
-
+        words = message.content.split()[:5]
+        title = " ".join(words).strip()
+        if len(title) > 90:
+            title = title[:87].rstrip() + "..."
         thread = await message.create_thread(
-            name=title,
+            name=title or "conversation",
             auto_archive_duration=60
         )
 
-    # 2. Build the conversation prompt with up to 100 messages
+    # 2. Build conversation prompt
     history = await get_thread_context(thread, limit=100)
 
     # 3. Prepare prompt, include system context only once
@@ -95,4 +89,11 @@ async def handle_ollama_response(message: discord.Message):
     # 4. Send typing indicator, query Ollama, and post reply
     async with thread.typing():
         response = await query_ollama(full_prompt)
-        await thread.send(response[:2000])
+        response = response[:2000]
+
+        if isinstance(message.channel, discord.Thread):
+            # For replies within an existing thread
+            await message.reply(response, mention_author=False)
+        else:
+            # For the very first bot message in the new thread
+            await thread.send(response)
