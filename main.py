@@ -22,6 +22,7 @@ from resources.music_handling import (
 )
 from resources.stable_diffusion import UpscaleButton, imagine_command
 from resources.ollama import query_ollama
+from resources.ollama import handle_ollama_response
 
 # ── Constants ────────────────────────────────────────────────────────────
 OLLAMA_CHANNEL_ID = keys.OLLAMA_CHANNEL_ID
@@ -155,17 +156,24 @@ async def on_message(message):
     if message.author == bot.user:
         return
 
+    # DMs
     if isinstance(message.channel, discord.DMChannel):
         await handle_dm_message(message)
         return
 
-    # if message.channel.id == OLLAMA_CHANNEL_ID:
-    #     bot.loop.create_task(handle_ollama_response(message))
+    # figure out the “real” channel ID: thread→parent, else itself
+    channel_id = (
+        message.channel.parent.id
+        if isinstance(message.channel, discord.Thread)
+        else message.channel.id
+    )
 
-async def handle_ollama_response(message):
-    async with message.channel.typing():
-        response = await query_ollama(message.content)
-        await message.reply(response[:2000])
+    if channel_id == OLLAMA_CHANNEL_ID:
+        bot.loop.create_task(handle_ollama_response(message))
+        return
+
+    # if you have other on_message logic, call this to let commands still work
+    await bot.process_commands(message)
 
 # ── Main Entrypoint ─────────────────────────────────────────────────────
 if __name__ == '__main__':
