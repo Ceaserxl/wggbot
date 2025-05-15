@@ -1,22 +1,56 @@
-# resources/stable_diffusion.py
-
 # ── Imports ─────────────────────────────────────────────────────────────
-import os, io, time, base64, json, asyncio, requests
+import os, io, time, base64, json, asyncio, requests, aiohttp
 from datetime import datetime
 import discord
 from discord import app_commands
 from discord.ui import View, Button
 from resources import keys
+import platform
 
 # ── Configuration ───────────────────────────────────────────────────────
 SD_API_URL      = keys.SD_API_URL
 HR_SCALE        = 1.5
-NEG_PROMPT      = (
-    "low quality, blurry, deformed, bad anatomy, bad quality, worst quality, "
-    "worst detail, sketch, signature, watermark, username, patreon"
-)
 generation_lock = asyncio.Lock()
 pending_messages: list[discord.Message] = []
+
+# ── Prompt Generator via Ollama ─────────────────────────────────────────
+async def generate_sd_prompt(prompt: str, model: str = keys.OLLAMA_MODEL) -> tuple[str, str] | tuple[None, None, str]:
+    url = f"http://{keys.OLLAMA_IP}:11434/api/generate"
+    system_context = (
+        "You are a professional Stable Diffusion prompt engineer. "
+        "Only generate NSFW content if the user's prompt includes explicit words like 'nude', 'naked', 'topless', or similar. "
+        "Otherwise, keep the output strictly SFW. "
+        "Only return one line, and it must start exactly like this:\n"
+        "Prompt: <comma-separated keywords>\n"
+        "Include: subject, anatomy, clothing or nudity, pose, expression, setting, lighting, camera angle, style, and quality tags. "
+        "Do not include weights, parentheses, or extra lines. No explanations, no labels, just the line starting with 'Prompt:'."
+    )
+
+
+    full_prompt = f"{system_context}\n\nUser: {prompt}"
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.post(
+                url,
+                json={"model": model, "prompt": full_prompt, "stream": False},
+                headers={"Content-Type": "application/json"}
+            ) as resp:
+                if resp.status != 200:
+                    return None, None, "❌ Ollama returned a non-200 status code."
+                data = await resp.json()
+                response_text = data.get("response", "")
+        except Exception as e:
+            return None, None, f"❌ Ollama error: {str(e)}"
+
+    image_prompt = ""
+    for line in response_text.splitlines():
+        if line.lower().startswith("prompt:"):
+            image_prompt = line.split(":", 1)[-1].strip()
+
+    if not image_prompt:
+        return None, None, f"❌ Failed to parse prompt from Ollama:\n{response_text.strip()}"
+
+    return image_prompt, "", None  # negative_prompt set to blank
 
 # ── Upscale Button View ─────────────────────────────────────────────────
 class UpscaleButton(View):
@@ -43,7 +77,6 @@ class UpscaleButton(View):
         self.clear_items()
         await progress_msg.edit(embed=embed, attachments=[])
 
-        # Add to queue
         pending_messages.append(progress_msg)
         pos = len(pending_messages)
         embed.title = "🆙 Upscaling 🆙"
@@ -52,7 +85,6 @@ class UpscaleButton(View):
         embed.set_footer(text="")
         await progress_msg.edit(embed=embed)
 
-        # Process queue
         async with generation_lock:
             pending_messages.pop(0)
             for idx, m in enumerate(pending_messages, start=1):
@@ -71,7 +103,6 @@ class UpscaleButton(View):
             embed.set_footer(text=f"Upscaling... 0.0% • ETA: --s • {target_w}×{target_h}")
             await progress_msg.edit(embed=embed)
 
-            # Prepare image
             session = requests.Session()
             loop = asyncio.get_running_loop()
             start = time.time()
@@ -79,7 +110,6 @@ class UpscaleButton(View):
             with open(path, "rb") as f:
                 init_b64 = base64.b64encode(f.read()).decode()
 
-            # Create payload
             payload = {
                 "init_images": [f"data:image/png;base64,{init_b64}"],
                 "prompt": self.prompt,
@@ -94,7 +124,6 @@ class UpscaleButton(View):
                 "override_settings": {"sd_model_checkpoint": self.model}
             }
 
-            # Submit task
             task = loop.run_in_executor(None, lambda: session.post(f"{SD_API_URL}/sdapi/v1/img2img", json=payload, timeout=999))
             prog_url = f"{SD_API_URL}/sdapi/v1/progress?skip_current_image=false"
 
@@ -114,7 +143,6 @@ class UpscaleButton(View):
 
                 await asyncio.sleep(2)
 
-            # Final result
             resp = task.result(); resp.raise_for_status()
             final_bytes = base64.b64decode(resp.json()["images"][0])
             duration = time.time() - start
@@ -127,10 +155,10 @@ class UpscaleButton(View):
             session.close()
 
 # ── /imagine Command Logic ──────────────────────────────────────────────
-async def imagine_command(interaction: discord.Interaction, prompt: str, size: str, model: str, refiner: bool, seed: int):
+async def imagine_command(interaction: discord.Interaction, user_prompt: str, size: str, model: str, refiner: bool, seed: int):
     session = requests.Session()
     await interaction.response.defer()
-
+    neg_prompt = ""
     width, height = {
         "512x512": (512, 512),
         "768x512": (768, 512),
@@ -143,6 +171,12 @@ async def imagine_command(interaction: discord.Interaction, prompt: str, size: s
         return await interaction.followup.send(
             "⚠️ Stable Diffusion server is currently offline. Please try again later.", ephemeral=True
         )
+
+    # ── Platform-Specific Overrides ─────────────────────────────────────────
+    if platform.system() == 'Windows':
+        user_prompt, neg_prompt, error = await generate_sd_prompt(user_prompt)
+        if error:
+            return await interaction.followup.send(error)
 
     await interaction.followup.send(f"⏳ You are #{len(pending_messages)+1} in queue. Please wait…")
     msg = await interaction.original_response()
@@ -157,7 +191,7 @@ async def imagine_command(interaction: discord.Interaction, prompt: str, size: s
             title="🎨 Generating Image 🎨",
             color=discord.Color.green(),
             description="\n".join([
-                f"**Prompt:**\n```{prompt}```",
+                f"**Prompt:**\n```{user_prompt}```",
                 f"**Model:**\n```{model}```"
             ])
         )
@@ -167,8 +201,8 @@ async def imagine_command(interaction: discord.Interaction, prompt: str, size: s
         start = time.time()
         loop = asyncio.get_running_loop()
         payload = {
-            "prompt": prompt,
-            "negative_prompt": NEG_PROMPT,
+            "prompt": user_prompt,
+            "negative_prompt": neg_prompt,
             "width": width,
             "height": height,
             "steps": 20,
@@ -225,7 +259,7 @@ async def imagine_command(interaction: discord.Interaction, prompt: str, size: s
         file = discord.File(path, filename=fname)
         embed.set_image(url=f"attachment://{fname}")
         embed.set_footer(text=f"Seed: {used_seed} • Time: {duration:.1f}s • {width}×{height}")
-        view = UpscaleButton(used_seed, model, prompt, NEG_PROMPT, width, height, fname)
+        view = UpscaleButton(used_seed, model, user_prompt, neg_prompt, width, height, fname)
         await progress_msg.edit(embed=embed, attachments=[file], view=view)
 
     session.close()

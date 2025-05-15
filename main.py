@@ -141,9 +141,9 @@ async def imagine(
     prompt: str,
     size: str = "512x512",
     model: str = "dynavisionXLAllInOneStylized_releaseV0610Bakedvae",
-    refiner: bool = False,
     seed: int = -1
 ):
+    refiner = False
     await imagine_command(interaction, prompt, size, model, refiner, seed)
 
 # ── Event Listeners ─────────────────────────────────────────────────────
@@ -151,7 +151,7 @@ async def imagine(
 async def on_ready():
     print(f'Logged in as {bot.user}')
     await bot.tree.sync()
- 
+
 @bot.event
 async def on_message(message):
     if message.author == bot.user:
