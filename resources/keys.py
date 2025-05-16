@@ -19,12 +19,14 @@ SD_API_URL         = os.getenv('SD_API_URL')
 OLLAMA_IP          = os.getenv('OLLAMA_IP')
 OLLAMA_CHANNEL_ID  = int(os.getenv('OLLAMA_CHANNEL_ID'))
 OLLAMA_MODEL       = os.getenv('OLLAMA_MODEL')
+DEBUG              = False
 
 # ── Platform-Specific Overrides ─────────────────────────────────────────
 if platform.system() == 'Windows':
     DISCORD_TOKEN = BETA_DISCORD_TOKEN
     SD_API_URL    = "http://127.0.0.1:7860"
     OLLAMA_IP     = "localhost"
+    DEBUG         = True
 else:
     DISCORD_TOKEN = LIVE_DISCORD_TOKEN
 

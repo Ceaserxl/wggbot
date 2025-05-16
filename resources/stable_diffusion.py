@@ -2,10 +2,8 @@
 import os, io, time, base64, json, asyncio, requests, aiohttp
 from datetime import datetime
 import discord
-from discord import app_commands
-from discord.ui import View, Button
+from discord.ui import View
 from resources import keys
-import platform
 
 # ── Configuration ───────────────────────────────────────────────────────
 SD_API_URL      = keys.SD_API_URL
@@ -173,7 +171,7 @@ async def imagine_command(interaction: discord.Interaction, user_prompt: str, si
         )
 
     # ── Platform-Specific Overrides ─────────────────────────────────────────
-    if platform.system() == 'Windows':
+    if keys.DEBUG:
         user_prompt, neg_prompt, error = await generate_sd_prompt(user_prompt)
         if error:
             return await interaction.followup.send(error)

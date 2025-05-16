@@ -1,10 +1,7 @@
 # main.py
 
 # ── Imports ─────────────────────────────────────────────────────────────
-import asyncio
 import logging
-import aiohttp
-import platform
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -170,7 +167,7 @@ async def on_message(message):
     )
 
     # ── Platform-Specific Overrides ──────────────────────────────────────
-    if platform.system() == 'Windows':
+    if keys.DEBUG:
         if channel_id == OLLAMA_CHANNEL_ID:
             bot.loop.create_task(handle_ollama_response(message))
             return
