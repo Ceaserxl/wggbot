@@ -159,7 +159,7 @@ async def on_message(message):
         await handle_dm_message(message)
         return
 
-    # figure out the “real” channel ID: thread→parent, else itself
+    # figure out the “real” channel ID: thread->parent, else itself
     channel_id = (
         message.channel.parent.id
         if isinstance(message.channel, discord.Thread)

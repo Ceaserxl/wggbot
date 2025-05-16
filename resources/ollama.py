@@ -11,6 +11,7 @@ SYSTEM_CONTEXT = (
     "but avoid sounding robotic. Always stay under 1500 characters—summarize when needed and skip filler. "
     "Never include labels like 'Bot:' or 'Assistant:' in your replies."
 )
+CHAT_LIMIT = 200
 
 # ── State ────────────────────────────────────────────────────────────────
 # Tracks which threads have already received the system context
@@ -18,9 +19,8 @@ _initialized_threads = set()
 
 # ── Ollama Query ─────────────────────────────────────────────────────────
 async def query_ollama(prompt: str, model: str = keys.OLLAMA_MODEL) -> str:
-    """
-    Sends the given prompt to Ollama, first performing a health check.
-    """
+
+    # Sends the given prompt to Ollama, first performing a health check.
     async with aiohttp.ClientSession() as session:
         # Health check + error handling
         try:
@@ -47,13 +47,12 @@ async def query_ollama(prompt: str, model: str = keys.OLLAMA_MODEL) -> str:
             return "❌ Ollama server is offline."
 
 # ── Thread Context Helper ────────────────────────────────────────────────
-async def get_thread_context(channel: discord.abc.Messageable, limit: int = 50) -> str:
-    """
-    Fetch up to `limit` most recent messages (oldest→newest) in this channel/thread,
-    and format them as:
-        User: <content>
-        Bot: <content>
-    """
+async def get_thread_context(channel: discord.abc.Messageable, limit: int = CHAT_LIMIT) -> str:
+    
+    # Fetch up to `limit` most recent messages (oldest→newest) in this channel/thread,
+    # and format them as:
+    #     User: <content>
+    #     Bot: <content>
     lines = []
     async for msg in channel.history(limit=limit, oldest_first=True):
         role = "Bot" if msg.author.bot else "User"
@@ -76,7 +75,7 @@ async def handle_ollama_response(message: discord.Message):
         )
 
     # 2. Build conversation prompt
-    history = await get_thread_context(thread, limit=100)
+    history = await get_thread_context(thread, limit=CHAT_LIMIT)
 
     # 3. Prepare prompt, include system context only once
     if thread.id not in _initialized_threads:
