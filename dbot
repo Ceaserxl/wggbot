@@ -1,154 +1,309 @@
 #!/usr/bin/env bash
-# dbot — per-project Discord bot manager + installer
+# dbot — Linux manager for your Discord bot (venv + menu)
+# Portable Python is extracted only during Install (option 8).
+# Detects x86_64 vs Raspberry Pi (arm/aarch64) and uses static archive names:
+#   - x86_64  -> resources/python313/cpython-3.13.7linux.tar.xz
+#   - rpi/arm -> resources/python313/cpython-3.13.7rpi.tar.gz
+# Option 8 also installs a global "dbot" wrapper in /usr/local/bin or ~/.local/bin
 
-# --- Resolve to script dir (works via symlink) ---
-SCRIPT_PATH="$(readlink -f "$0")"
-SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
-cd "$SCRIPT_DIR" || exit 1
+set -Eeuo pipefail
+
+# --- Move to script directory ---
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
 # --- Config (auto) ---
-SESSION="$(basename "$SCRIPT_DIR")"         # screen session = folder name
+SESSION="$(basename "$SCRIPT_DIR")"
 LOG="${SESSION}.log"
-PYTHON="${PYTHON:-python3}"
-MAIN="${MAIN:-main.py}"
-VENV_ACT="${VENV_ACT:-venv/bin/activate}"
+MAIN="main.py"
+VENV_DIR="venv"                       # Linux uses 'venv' (Windows uses 'wvenv')
+VENV_PY="${VENV_DIR}/bin/python"
+ACTIVATOR="${VENV_DIR}/bin/activate"
 
-usage() {
-  echo "Usage: $0 {start|stop|restart|log|attach|venv|export|install}"
-  exit 1
+# --- Arch-specific portable Python (static filenames) ---
+EMBED_BASE="resources/python313"
+ARCH="$(uname -m || true)"
+if [[ "$ARCH" == "x86_64" ]]; then
+  ARCH_LABEL="linux-x64"
+  ARCHIVE="${EMBED_BASE}/cpython-3.13.7linux.tar.xz"
+elif [[ "$ARCH" == "aarch64" || "$ARCH" == "armv7l" || "$ARCH" == arm* ]]; then
+  ARCH_LABEL="rpi"
+  ARCHIVE="${EMBED_BASE}/cpython-3.13.7rpi.tar.gz"
+else
+  ARCH_LABEL="linux-unknown"
+  ARCHIVE="${EMBED_BASE}/cpython-3.13.7linux.tar.xz"
+fi
+EMBED_DIR="${EMBED_BASE}/${ARCH_LABEL}"
+
+brief_pause() { sleep 2; }
+
+require_installed() {
+  if [[ ! -f "$ACTIVATOR" ]]; then
+    echo "Missing: $ACTIVATOR"
+    echo "Run Install (option 8) first."
+    brief_pause
+    return 1
+  fi
+  if [[ ! -x "$VENV_PY" ]]; then
+    echo "Missing: $VENV_PY"
+    echo "Run Install (option 8) first."
+    brief_pause
+    return 1
+  fi
+  return 0
 }
 
 is_running() {
-  screen -list | grep -q "[.]${SESSION}[[:space:]]"
+  [[ -f .dbot.pid ]] || return 1
+  local pid; pid="$(< .dbot.pid)"
+  [[ -n "$pid" && -d "/proc/$pid" ]] || return 1
+  return 0
 }
 
-case "$1" in
-  start)
-    if is_running; then
-      echo "Already running: $SESSION"; exit 0
-    fi
-    if [ -f "$VENV_ACT" ]; then
-      screen -dmS "$SESSION" bash -lc "source '$VENV_ACT' && exec $PYTHON '$MAIN' >> '$LOG' 2>&1"
-    else
-      echo "Note: $VENV_ACT not found, starting without venv."
-      screen -dmS "$SESSION" bash -lc "exec $PYTHON '$MAIN' >> '$LOG' 2>&1"
-    fi
-    echo "Started '$MAIN' in screen session: $SESSION (log: $LOG)"
-    ;;
+start_headless_fn() {
+  require_installed || return 1
+  if is_running; then
+    echo "Already running headless (PID $(< .dbot.pid)). Stop it first (option 3)."
+    brief_pause
+    return 1
+  fi
+  echo "Starting ${MAIN} headless..."
+  nohup bash -lc "source '$ACTIVATOR'; exec python '$MAIN'" >>"$LOG" 2>&1 &
+  echo $! > .dbot.pid
+  echo "Started (PID $(< .dbot.pid)) - logging to '$LOG'"
+  sleep 1
+  return 0
+}
 
-  stop)
-    if is_running; then
-      screen -S "$SESSION" -X quit
-      echo "Stopped: $SESSION"
-    else
-      echo "Not running: $SESSION"
-    fi
-    ;;
+stop_fn() {
+  if ! is_running; then
+    echo "No headless PID file; nothing to stop. If you used Start, Ctrl+C that window."
+    brief_pause
+    return 1
+  fi
+  local pid; pid="$(< .dbot.pid)"
+  echo "Stopping PID $pid ..."
+  kill "$pid" 2>/dev/null || true
+  sleep 1
+  [[ -d "/proc/$pid" ]] && kill -9 "$pid" 2>/dev/null || true
+  rm -f .dbot.pid
+  echo "Stopped."
+  sleep 1
+  return 0
+}
 
-  restart)
-    if is_running; then
-      screen -S "$SESSION" -X quit
-      # tiny wait to ensure the old session is gone
-      sleep 0.2
-    fi
-    if [ -f "$VENV_ACT" ]; then
-      screen -dmS "$SESSION" bash -lc "source '$VENV_ACT' && exec $PYTHON '$MAIN' >> '$LOG' 2>&1"
-    else
-      screen -dmS "$SESSION" bash -lc "exec $PYTHON '$MAIN' >> '$LOG' 2>&1"
-    fi
-    echo "Restarted '$MAIN' in screen session: $SESSION (log: $LOG)"
-    ;;
+open_terminal_tail() {
+  if command -v gnome-terminal >/dev/null 2>&1; then
+    gnome-terminal -- bash -lc "echo 'Tailing $LOG (close this window to exit)...'; tail -n 50 -F '$LOG'"
+  elif command -v xfce4-terminal >/dev/null 2>&1; then
+    xfce4-terminal -- bash -lc "echo 'Tailing $LOG (close this window to exit)...'; tail -n 50 -F '$LOG'"
+  elif command -v konsole >/dev/null 2>&1; then
+    konsole -e bash -lc "echo 'Tailing $LOG (close this window to exit)...'; tail -n 50 -F '$LOG'"
+  elif command -v xterm >/dev/null 2>&1; then
+    xterm -e bash -lc "echo 'Tailing $LOG (close this window to exit)...'; tail -n 50 -F '$LOG'"
+  else
+    echo "No separate terminal found; showing inline tail (Ctrl+C to return)..."
+    tail -n 50 -F "$LOG"
+  fi
+}
 
-  log)
-    [ -f "$LOG" ] || { echo "No log yet: $LOG"; exit 1; }
-    echo "Tailing $LOG (Ctrl+C to exit)"
-    tail -f "$LOG"
-    ;;
+open_terminal_foreground() {
+  local run="source '$ACTIVATOR'; python '$MAIN'; echo; echo 'Process exited. Close this window.'; exec bash"
+  if command -v gnome-terminal >/dev/null 2>&1; then
+    gnome-terminal -- bash -lc "$run"
+  elif command -v xfce4-terminal >/dev/null 2>&1; then
+    xfce4-terminal -- bash -lc "$run"
+  elif command -v konsole >/dev/null 2>&1; then
+    konsole -e bash -lc "$run"
+  elif command -v xterm >/dev/null 2>&1; then
+    xterm -e bash -lc "$run"
+  else
+    echo "No terminal emulator detected. Running in this shell (Ctrl+C to stop)."
+    bash -lc "source '$ACTIVATOR'; exec python '$MAIN'"
+  fi
+}
 
-  attach)
-    if is_running; then
-      screen -r "$SESSION"
-    else
-      echo "Not running: $SESSION"; exit 1
-    fi
-    ;;
+install_global_wrapper() {
+  # Install global 'dbot' wrapper that finds nearest ./dbot or ./dbot.sh
+  local dest="/usr/local/bin/dbot"
+  if [[ ! -w "/usr/local/bin" ]]; then
+    dest="$HOME/.local/bin/dbot"
+    mkdir -p "$HOME/.local/bin"
+  fi
 
-  venv)
-    [ -f "$VENV_ACT" ] || { echo "Missing venv: $VENV_ACT"; exit 1; }
-    # Open a NEW interactive subshell with venv activated (shows (venv))
-    exec bash --rcfile <(echo "source '$VENV_ACT'") -i
-    ;;
-
-  export)
-    [ -f "$VENV_ACT" ] || { echo "Missing venv: $VENV_ACT"; exit 1; }
-    echo "Exporting dependencies to requirements.txt"
-    bash -lc "source '$VENV_ACT' && pip freeze > requirements.txt" || { echo "Export failed"; exit 1; }
-    echo "Saved as requirements.txt"
-    ;;
-
-  install)
-    # If venv exists, ask whether to reinstall (wipe & recreate)
-    if [ -d "venv" ]; then
-      read -r -p "venv/ exists. Reinstall it (delete and recreate)? [y/N]: " ans
-      case "$ans" in
-        y|Y)
-          echo "Removing existing venv/..."
-          rm -rf venv || { echo "Failed to remove venv"; exit 1; }
-          ;;
-        *)
-          echo "Keeping existing venv; will only install the dbot wrapper."
-          ;;
-      esac
-    fi
-
-    # Create venv if missing (either new or after deletion)
-    if [ ! -d "venv" ]; then
-      echo "Creating virtual environment: venv/"
-      "$PYTHON" -m venv venv 2>/dev/null || python3 -m venv venv || { echo "Failed to create venv"; exit 1; }
-
-      echo "Upgrading pip in venv..."
-      bash -lc "source '$VENV_ACT' && python -m pip install --upgrade pip" || { echo "pip upgrade failed"; exit 1; }
-
-      if [ -f "requirements.txt" ]; then
-        echo "Installing requirements.txt..."
-        bash -lc "source '$VENV_ACT' && pip install -r requirements.txt" || { echo "requirements install failed"; exit 1; }
-      else
-        echo "No requirements.txt found; skipping dependency install."
-      fi
-    fi
-
-    # Install global wrapper that finds nearest ./dbot in current/parent dirs
-    DEST="/usr/local/bin/dbot"
-    if [ ! -w "/usr/local/bin" ]; then
-      DEST="$HOME/.local/bin/dbot"
-      mkdir -p "$HOME/.local/bin"
-    fi
-    cat > "$DEST" <<'WRAP'
+  cat >"$dest" <<'WRAP'
 #!/usr/bin/env bash
 find_up() {
   local d="$PWD"
   while :; do
-    if [ -x "$d/dbot" ]; then
-      echo "$d/dbot"; return 0
-    fi
-    [ "$d" = "/" ] && return 1
+    if [[ -x "$d/dbot" ]]; then echo "$d/dbot"; return 0; fi
+    if [[ -x "$d/dbot.sh" ]]; then echo "$d/dbot.sh"; return 0; fi
+    [[ "$d" == "/" ]] && return 1
     d="$(dirname "$d")"
   done
 }
 script="$(find_up)"
-if [ -n "$script" ]; then
+if [[ -n "$script" ]]; then
   exec "$script" "$@"
 else
   echo "dbot: no ./dbot found in current or parent dirs." >&2
   exit 1
 fi
 WRAP
-    chmod +x "$DEST"
-    echo "Installed global 'dbot' at: $DEST"
-    if [[ "$DEST" = "$HOME/.local/bin/dbot" ]] && ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
-      echo "Add to PATH: echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc && source ~/.bashrc"
-    fi
-    ;;
 
-  *) usage ;;
-esac
+  chmod +x "$dest"
+  echo "Installed global 'dbot' at: $dest"
+  if [[ "$dest" == "$HOME/.local/bin/dbot" ]] && ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
+    echo "Add to PATH:  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc && source ~/.bashrc"
+  fi
+}
+
+install_fn() {
+  if [[ -d "$VENV_DIR" ]]; then
+    read -r -p "venv exists. Reinstall (delete and recreate venv + portable Python)? [y/N]: " ans
+    if [[ "$ans" =~ ^[Yy]$ ]]; then
+      echo "Removing $VENV_DIR ..."
+      rm -rf -- "$VENV_DIR"
+      echo "Removing portable Python folder ${EMBED_DIR} ..."
+      rm -rf -- "$EMBED_DIR" 2>/dev/null || true
+    else
+      echo "Keeping existing venv; skipping venv creation and deps."
+      install_global_wrapper
+      echo "Install complete."
+      brief_pause
+      return 0
+    fi
+  fi
+
+  mkdir -p "$EMBED_DIR"
+
+  if [[ ! -f "$ARCHIVE" ]]; then
+    echo "Missing archive: $ARCHIVE"
+    echo "Place the file with EXACT name above, then run Install again."
+    brief_pause
+    return 1
+  fi
+
+  echo "Extracting $(basename "$ARCHIVE") to $EMBED_DIR ..."
+  if [[ "$ARCHIVE" == *.tar.xz ]]; then
+    command -v xz >/dev/null 2>&1 || { echo "'xz' not found. Install xz-utils."; brief_pause; return 1; }
+    tar -xJf "$ARCHIVE" -C "$EMBED_DIR"
+  else
+    tar -xzf "$ARCHIVE" -C "$EMBED_DIR"
+  fi
+
+  EMBED_PY=""
+  if [[ -x "$EMBED_DIR/bin/python3" ]]; then
+    EMBED_PY="$EMBED_DIR/bin/python3"
+  elif [[ -x "$EMBED_DIR/python/bin/python3" ]]; then
+    EMBED_PY="$EMBED_DIR/python/bin/python3"
+  else
+    mapfile -t hits < <(find "$EMBED_DIR" -maxdepth 3 -type f -perm -111 -name "python3" 2>/dev/null || true)
+    [[ ${#hits[@]} -gt 0 ]] && EMBED_PY="${hits[0]}"
+  fi
+
+  if [[ -z "$EMBED_PY" ]]; then
+    echo "Extraction finished but python3 was not found under $EMBED_DIR."
+    echo "Check archive contents or adjust detection paths."
+    brief_pause
+    return 1
+  fi
+
+  echo "Embedded Python ready: $EMBED_PY"
+
+  echo "Creating virtual environment: $VENV_DIR ..."
+  "$EMBED_PY" -m ensurepip -U
+  "$EMBED_PY" -m pip install -U pip
+  "$EMBED_PY" -m venv "$VENV_DIR" || { echo "Failed to create venv."; brief_pause; return 1; }
+
+  echo "Upgrading pip in venv ..."
+  "$VENV_PY" -m pip install --upgrade pip
+
+  if [[ -f "requirements.txt" ]]; then
+    echo "Installing requirements.txt ..."
+    "$VENV_PY" -m pip install -r requirements.txt || { echo "requirements install failed"; brief_pause; return 1; }
+  else
+    echo "No requirements.txt found; skipping dependency install."
+  fi
+
+  install_global_wrapper
+
+  echo "Install complete."
+  brief_pause
+  return 0
+}
+
+wipe_only() {
+  echo "This will delete the venv and portable Python. No reinstall will be performed."
+  read -r -p "Proceed? [y/N]: " ans
+  [[ "$ans" =~ ^[Yy]$ ]] || return 0
+
+  is_running && stop_fn || true
+
+  echo "Deleting $VENV_DIR ..."
+  rm -rf -- "$VENV_DIR" 2>/dev/null || true
+
+  echo "Deleting portable Python ($EMBED_DIR) ..."
+  rm -rf -- "$EMBED_DIR" 2>/dev/null || true
+
+  echo "Wipe complete."
+  brief_pause
+}
+
+export_req() {
+  if [[ ! -x "$VENV_PY" ]]; then
+    echo "$VENV_PY not found. Run Install (option 8) first."
+    brief_pause
+    return
+  fi
+  echo "Exporting requirements to requirements.txt ..."
+  "$VENV_PY" -m pip freeze > requirements.txt && echo "Saved: requirements.txt" || echo "Export failed."
+  brief_pause
+}
+
+shell_fn() {
+  if [[ ! -f "$ACTIVATOR" ]]; then
+    echo "$ACTIVATOR not found. Run Install (option 8) to create venv."
+    brief_pause
+    return
+  fi
+  bash --rcfile <(echo "source '$ACTIVATOR'") -i
+}
+
+# --- Menu loop ---
+while :; do
+  clear
+  echo "==========================================="
+  echo "  DBOT for \"$SESSION\"  (Linux: $ARCH_LABEL)"
+  echo "==========================================="
+  echo "[1] Start"
+  echo "[2] Start (headless)  - background, logs to \"$LOG\""
+  echo "[3] Stop (headless session only)"
+  echo "[4] Restart  (headless session only)"
+  echo "[5] Log (tail)  - opens separate window; close it to exit"
+  echo "[6] Shell (activate venv)"
+  echo "[7] Export requirements.txt"
+  echo "[8] Install / Reinstall venv + deps  (extract on demand, add 'dbot' cmd)"
+  echo "[9] Wipe  (delete venv + ${EMBED_DIR})"
+  echo "[Q] Quit"
+  echo
+  read -r -p "Select an option: " choice
+
+  case "${choice,,}" in
+    1)
+      if require_installed; then open_terminal_foreground; fi
+      ;;
+    2) start_headless_fn || true ;;
+    3) stop_fn || true ;;
+    4) stop_fn || true; start_headless_fn || true ;;
+    5)
+      if [[ ! -f "$LOG" ]]; then echo "No log yet: $LOG"; brief_pause; else open_terminal_tail; fi
+      ;;
+    6) shell_fn ;;
+    7) export_req ;;
+    8) install_fn ;;
+    9) wipe_only ;;
+    q) break ;;
+    *) : ;;
+  esac
+done

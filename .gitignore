@@ -19,6 +19,7 @@ env/
 # Portable Python bundles
 resources/python313/win-x64/
 resources/python313/linux-x64/
+resources/python313/rpi/
 
 # Logs & caches
 *.log
@@ -26,6 +27,7 @@ resources/python313/linux-x64/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+*.pid
 
 # Editors/OS
 .vscode/
