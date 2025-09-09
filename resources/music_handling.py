@@ -50,13 +50,26 @@ async def play_song(vc, url, mention, text_channel, title, artist):
         audio_url = info_dict['url']
 
     if audio_url:
+        # Quick ffmpeg check: on Windows try next to the exe (or resources), else use PATH/"ffmpeg"
+        import os, sys, shutil
+        from pathlib import Path
+
+        if os.name == "nt":
+            exe = Path(sys.executable).with_name("ffmpeg.exe")
+            if not exe.exists():
+                alt = Path(__file__).parent / "resources" / "ffmpeg" / "ffmpeg.exe"
+                exe = alt if alt.exists() else (shutil.which("ffmpeg.exe") or "ffmpeg.exe")
+        else:
+            exe = shutil.which("ffmpeg") or "ffmpeg"
+
         ffmpeg_options = {
             'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
             'options': '-vn -af "volume=0.1"'
         }
-        vc.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=audio_url, **ffmpeg_options))
+        vc.play(discord.FFmpegPCMAudio(executable=str(exe), source=audio_url, **ffmpeg_options))
     else:
         await text_channel.send("Could not find a matching audio track for the provided link.")
+
 
 # ── Command Handlers ────────────────────────────────────────────────────
 async def handle_play_command(interaction: discord.Interaction, url: str, message: discord.WebhookMessage):

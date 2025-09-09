@@ -1,14 +1,38 @@
-# Ignore Discord-related files or folders
-discord/
-
-# Ignore saved/generated image files
-images/
-
-# Python cache & virtualenv (optional but recommended)
+# Python
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*.so
 *.pyd
-env/
+*.pyo
+*.egg-info/
+.build/
+dist/
+.eggs/
+
+# Venvs & env files
+wvenv/
 venv/
+env/
+.python-version
 .env
+
+# Portable Python bundles
+resources/python313/win-x64/
+resources/python313/linux-x64/
+
+# Logs & caches
+*.log
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Editors/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Images & tokens (your originals)
+images/
+cookies.txt

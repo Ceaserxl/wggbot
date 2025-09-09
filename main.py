@@ -23,7 +23,8 @@ from resources.ollama import query_ollama
 from resources.ollama import handle_ollama_response
 
 # ── Constants ────────────────────────────────────────────────────────────
-OLLAMA_CHANNEL_ID = keys.OLLAMA_CHANNEL_ID
+OLLAMA_LIVE_CHANNEL_ID = keys.OLLAMA_LIVE_CHANNEL_ID
+OLLAMA_BETA_CHANNEL_ID = keys.OLLAMA_BETA_CHANNEL_ID
 
 # ── Logging Setup ────────────────────────────────────────────────────────
 t = logging.getLogger()
@@ -43,14 +44,14 @@ async def ping(interaction: discord.Interaction):
     latency = bot.latency * 1000  # Convert to milliseconds
     await interaction.response.send_message(f"Pong! Latency: {latency:.2f} ms")
 
-@bot.tree.command(name="chat", description="Chat with the bot using a prompt.")
-async def chat(interaction: discord.Interaction, prompt: str):
-    print("Executing /chat")
-    if isinstance(interaction.channel, discord.DMChannel):
-        await interaction.response.send_message("You don't need to use /chat here. Just type normally", ephemeral=True)
-    else:
-        await interaction.response.defer()
-        await handle_chat_command(interaction, prompt, bot)
+# @bot.tree.command(name="chat", description="Chat with the bot using a prompt.")
+# async def chat(interaction: discord.Interaction, prompt: str):
+#     print("Executing /chat")
+#     if isinstance(interaction.channel, discord.DMChannel):
+#         await interaction.response.send_message("You don't need to use /chat here. Just type normally", ephemeral=True)
+#     else:
+#         await interaction.response.defer()
+#         await handle_chat_command(interaction, prompt, bot)
 
 @bot.tree.command(name="play", description="Play a song from a YouTube link.")
 async def play(interaction: discord.Interaction, link: str):
@@ -114,9 +115,12 @@ async def image(interaction: discord.Interaction, prompt: str):
 @bot.tree.command(name="imagine", description="Generate an image using Stable Diffusion")
 @app_commands.choices(
     size=[
-        app_commands.Choice(name="Square",   value="512x512"),
-        app_commands.Choice(name="Portrait", value="512x768"),
-        app_commands.Choice(name="Landscape",value="768x512"),
+        app_commands.Choice(name="Square",      value="512x512"),
+        app_commands.Choice(name="Portrait",    value="512x768"),
+        app_commands.Choice(name="Landscape",   value="768x512"),
+        # app_commands.Choice(name="Square 2x",   value="1024x1024"),
+        # app_commands.Choice(name="Portrait 2x", value="1024x1536"),
+        # app_commands.Choice(name="Landscape 2x",value="1536x1024"),
     ]
 )
 @app_commands.choices(
@@ -138,10 +142,11 @@ async def imagine(
     prompt: str,
     size: str = "512x512",
     model: str = "dynavisionXLAllInOneStylized_releaseV0610Bakedvae",
-    seed: int = -1
+    seed: int = -1,
+    gpt: bool = False
 ):
     refiner = False
-    await imagine_command(interaction, prompt, size, model, refiner, seed)
+    await imagine_command(interaction, prompt, size, model, refiner, seed, gpt)
 
 # ── Event Listeners ─────────────────────────────────────────────────────
 @bot.event
@@ -166,11 +171,9 @@ async def on_message(message):
         else message.channel.id
     )
 
-    # ── Platform-Specific Overrides ──────────────────────────────────────
-    if keys.DEBUG:
-        if channel_id == OLLAMA_CHANNEL_ID:
-            bot.loop.create_task(handle_ollama_response(message))
-            return
+    if channel_id == OLLAMA_BETA_CHANNEL_ID or channel_id == OLLAMA_LIVE_CHANNEL_ID:
+        bot.loop.create_task(handle_ollama_response(message))
+        return
 
     # if you have other on_message logic, call this to let commands still work
     await bot.process_commands(message)

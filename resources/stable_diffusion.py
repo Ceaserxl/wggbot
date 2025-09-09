@@ -153,7 +153,7 @@ class UpscaleButton(View):
             session.close()
 
 # ── /imagine Command Logic ──────────────────────────────────────────────
-async def imagine_command(interaction: discord.Interaction, user_prompt: str, size: str, model: str, refiner: bool, seed: int):
+async def imagine_command(interaction: discord.Interaction, user_prompt: str, size: str, model: str, refiner: bool, seed: int, gpt: bool):
     session = requests.Session()
     await interaction.response.defer()
     neg_prompt = ""
@@ -161,6 +161,9 @@ async def imagine_command(interaction: discord.Interaction, user_prompt: str, si
         "512x512": (512, 512),
         "768x512": (768, 512),
         "512x768": (512, 768),
+        "1024x1024": (1024, 1024),
+        "1024x1536": (1024, 1536),
+        "1536x1024": (1536, 1024),
     }.get(size, (512, 512))
 
     try:
@@ -172,7 +175,10 @@ async def imagine_command(interaction: discord.Interaction, user_prompt: str, si
 
     # ── Platform-Specific Overrides ─────────────────────────────────────────
     if keys.DEBUG:
-        user_prompt, neg_prompt, error = await generate_sd_prompt(user_prompt)
+        if not gpt:
+            user_prompt, neg_prompt, error = user_prompt, "", None #await generate_sd_prompt(user_prompt)
+        else:
+            user_prompt, neg_prompt, error = await generate_sd_prompt(user_prompt)
         if error:
             return await interaction.followup.send(error)
 

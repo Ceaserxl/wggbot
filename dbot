@@ -1,0 +1,154 @@
+#!/usr/bin/env bash
+# dbot — per-project Discord bot manager + installer
+
+# --- Resolve to script dir (works via symlink) ---
+SCRIPT_PATH="$(readlink -f "$0")"
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+cd "$SCRIPT_DIR" || exit 1
+
+# --- Config (auto) ---
+SESSION="$(basename "$SCRIPT_DIR")"         # screen session = folder name
+LOG="${SESSION}.log"
+PYTHON="${PYTHON:-python3}"
+MAIN="${MAIN:-main.py}"
+VENV_ACT="${VENV_ACT:-venv/bin/activate}"
+
+usage() {
+  echo "Usage: $0 {start|stop|restart|log|attach|venv|export|install}"
+  exit 1
+}
+
+is_running() {
+  screen -list | grep -q "[.]${SESSION}[[:space:]]"
+}
+
+case "$1" in
+  start)
+    if is_running; then
+      echo "Already running: $SESSION"; exit 0
+    fi
+    if [ -f "$VENV_ACT" ]; then
+      screen -dmS "$SESSION" bash -lc "source '$VENV_ACT' && exec $PYTHON '$MAIN' >> '$LOG' 2>&1"
+    else
+      echo "Note: $VENV_ACT not found, starting without venv."
+      screen -dmS "$SESSION" bash -lc "exec $PYTHON '$MAIN' >> '$LOG' 2>&1"
+    fi
+    echo "Started '$MAIN' in screen session: $SESSION (log: $LOG)"
+    ;;
+
+  stop)
+    if is_running; then
+      screen -S "$SESSION" -X quit
+      echo "Stopped: $SESSION"
+    else
+      echo "Not running: $SESSION"
+    fi
+    ;;
+
+  restart)
+    if is_running; then
+      screen -S "$SESSION" -X quit
+      # tiny wait to ensure the old session is gone
+      sleep 0.2
+    fi
+    if [ -f "$VENV_ACT" ]; then
+      screen -dmS "$SESSION" bash -lc "source '$VENV_ACT' && exec $PYTHON '$MAIN' >> '$LOG' 2>&1"
+    else
+      screen -dmS "$SESSION" bash -lc "exec $PYTHON '$MAIN' >> '$LOG' 2>&1"
+    fi
+    echo "Restarted '$MAIN' in screen session: $SESSION (log: $LOG)"
+    ;;
+
+  log)
+    [ -f "$LOG" ] || { echo "No log yet: $LOG"; exit 1; }
+    echo "Tailing $LOG (Ctrl+C to exit)"
+    tail -f "$LOG"
+    ;;
+
+  attach)
+    if is_running; then
+      screen -r "$SESSION"
+    else
+      echo "Not running: $SESSION"; exit 1
+    fi
+    ;;
+
+  venv)
+    [ -f "$VENV_ACT" ] || { echo "Missing venv: $VENV_ACT"; exit 1; }
+    # Open a NEW interactive subshell with venv activated (shows (venv))
+    exec bash --rcfile <(echo "source '$VENV_ACT'") -i
+    ;;
+
+  export)
+    [ -f "$VENV_ACT" ] || { echo "Missing venv: $VENV_ACT"; exit 1; }
+    echo "Exporting dependencies to requirements.txt"
+    bash -lc "source '$VENV_ACT' && pip freeze > requirements.txt" || { echo "Export failed"; exit 1; }
+    echo "Saved as requirements.txt"
+    ;;
+
+  install)
+    # If venv exists, ask whether to reinstall (wipe & recreate)
+    if [ -d "venv" ]; then
+      read -r -p "venv/ exists. Reinstall it (delete and recreate)? [y/N]: " ans
+      case "$ans" in
+        y|Y)
+          echo "Removing existing venv/..."
+          rm -rf venv || { echo "Failed to remove venv"; exit 1; }
+          ;;
+        *)
+          echo "Keeping existing venv; will only install the dbot wrapper."
+          ;;
+      esac
+    fi
+
+    # Create venv if missing (either new or after deletion)
+    if [ ! -d "venv" ]; then
+      echo "Creating virtual environment: venv/"
+      "$PYTHON" -m venv venv 2>/dev/null || python3 -m venv venv || { echo "Failed to create venv"; exit 1; }
+
+      echo "Upgrading pip in venv..."
+      bash -lc "source '$VENV_ACT' && python -m pip install --upgrade pip" || { echo "pip upgrade failed"; exit 1; }
+
+      if [ -f "requirements.txt" ]; then
+        echo "Installing requirements.txt..."
+        bash -lc "source '$VENV_ACT' && pip install -r requirements.txt" || { echo "requirements install failed"; exit 1; }
+      else
+        echo "No requirements.txt found; skipping dependency install."
+      fi
+    fi
+
+    # Install global wrapper that finds nearest ./dbot in current/parent dirs
+    DEST="/usr/local/bin/dbot"
+    if [ ! -w "/usr/local/bin" ]; then
+      DEST="$HOME/.local/bin/dbot"
+      mkdir -p "$HOME/.local/bin"
+    fi
+    cat > "$DEST" <<'WRAP'
+#!/usr/bin/env bash
+find_up() {
+  local d="$PWD"
+  while :; do
+    if [ -x "$d/dbot" ]; then
+      echo "$d/dbot"; return 0
+    fi
+    [ "$d" = "/" ] && return 1
+    d="$(dirname "$d")"
+  done
+}
+script="$(find_up)"
+if [ -n "$script" ]; then
+  exec "$script" "$@"
+else
+  echo "dbot: no ./dbot found in current or parent dirs." >&2
+  exit 1
+fi
+WRAP
+    chmod +x "$DEST"
+    echo "Installed global 'dbot' at: $DEST"
+    if [[ "$DEST" = "$HOME/.local/bin/dbot" ]] && ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
+      echo "Add to PATH: echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc && source ~/.bashrc"
+    fi
+    ;;
+
+  *) usage ;;
+esac
