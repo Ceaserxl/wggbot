@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 
-DEBUG              = False
+DEBUG              = os.getenv('DEBUG', 'False').lower() in ('true', '1', 't')
 LIVE_DISCORD_TOKEN = os.getenv('LIVE_DISCORD_TOKEN')
 BETA_DISCORD_TOKEN = os.getenv('BETA_DISCORD_TOKEN')
 OPENAI_API_KEY     = os.getenv('OPENAI_API_KEY')
