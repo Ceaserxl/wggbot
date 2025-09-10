@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 # ── Load Environment Variables ──────────────────────────────────────────
 load_dotenv(override=True)
 
-
 DEBUG              = os.getenv('DEBUG', 'False').lower() in ('true', '1', 't')
 LIVE_DISCORD_TOKEN = os.getenv('LIVE_DISCORD_TOKEN')
 BETA_DISCORD_TOKEN = os.getenv('BETA_DISCORD_TOKEN')
@@ -24,7 +23,6 @@ OLLAMA_BETA_CHANNEL_ID  = int(os.getenv('OLLAMA_BETA_CHANNEL_ID'))
 #OLLAMA_MODEL       = "phi3:mini"
 #OLLAMA_MODEL       = "llama3.2:3b"
 OLLAMA_MODEL       = "qwen2:1.5b"
-
 
 # ── Platform-Specific Overrides ─────────────────────────────────────────
 if DEBUG:
