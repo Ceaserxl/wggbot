@@ -19,6 +19,7 @@ MAIN="main.py"
 VENV_DIR="venv"                       # Linux uses 'venv' (Windows uses 'wvenv')
 VENV_PY="${VENV_DIR}/bin/python"
 ACTIVATOR="${VENV_DIR}/bin/activate"
+REPO_URL="https://github.com/Ceaserxl/wggbot.git"
 
 # --- Arch-specific portable Python (static filenames) ---
 EMBED_BASE="resources/python313"
@@ -270,6 +271,69 @@ shell_fn() {
   bash --rcfile <(echo "source '$ACTIVATOR'") -i
 }
 
+# --- Update check & pull (option 0) ---
+update_check_fn() {
+  command -v git >/dev/null 2>&1 || { echo "git is not installed."; brief_pause; return 1; }
+
+  echo "Checking remote HEAD for $REPO_URL ..."
+  local remote_hash=""
+  # Try git first (fast, no API limits)
+  remote_hash="$(git -c http.lowSpeedLimit=1 -c http.lowSpeedTime=5 ls-remote -h "$REPO_URL" HEAD 2>/dev/null | awk '{print $1}')"
+
+  # Fallback via GitHub API if git/SSL has issues
+  if [[ -z "$remote_hash" ]]; then
+    remote_hash="$(curl -fsSL https://api.github.com/repos/Ceaserxl/wggbot/commits/HEAD \
+      | sed -n 's/.*"sha": *"\([0-9a-f]\{40\}\)".*/\1/p' | head -n1 || true)"
+  fi
+
+  if [[ -z "$remote_hash" ]]; then
+    echo "Failed to query remote hash (check network/SSL)."
+    echo "Tips: ensure 'git' & 'ca-certificates' installed; try:  curl https://github.com  "
+    brief_pause
+    return 1
+  fi
+
+  local local_hash="(none)"
+  if [[ -d .git ]]; then
+    local_hash="$(git rev-parse HEAD 2>/dev/null || echo '(unknown)')"
+  fi
+
+  echo "Local : $local_hash"
+  echo "Remote: $remote_hash"
+
+  if [[ "$local_hash" == "$remote_hash" ]]; then
+    echo "Already up-to-date."
+    brief_pause
+    return 0
+  fi
+
+  echo
+  echo "An update is available."
+  read -r -p "Stop bot, WIPE folder, and pull latest? [y/N]: " ans
+  [[ "$ans" =~ ^[Yy]$ ]] || return 0
+
+  is_running && stop_fn || true
+
+  if [[ -d .git ]]; then
+    echo "Resetting to remote and wiping untracked files..."
+    git fetch --all --prune
+    git reset --hard "$remote_hash"
+    git clean -xdf
+  else
+    echo "Not a git repo: re-cloning…"
+    local tmpdir; tmpdir="$(mktemp -d)"
+    git clone --depth=1 "$REPO_URL" "$tmpdir/newrepo"
+    shopt -s dotglob
+    rm -rf "$SCRIPT_DIR"/* "$SCRIPT_DIR"/.[!.]* "$SCRIPT_DIR"/..?* 2>/dev/null || true
+    cp -a "$tmpdir/newrepo/." "$SCRIPT_DIR/"
+    rm -rf "$tmpdir"
+    shopt -u dotglob
+  fi
+
+  echo "Update complete."
+  brief_pause
+}
+
 # --- Menu loop ---
 while :; do
   clear
@@ -285,20 +349,18 @@ while :; do
   echo "[7] Export requirements.txt"
   echo "[8] Install / Reinstall venv + deps  (extract on demand, add 'dbot' cmd)"
   echo "[9] Wipe  (delete venv + ${EMBED_DIR})"
+  echo "[0] Check for updates (wipe & pull if newer)"
   echo "[Q] Quit"
   echo
   read -r -p "Select an option: " choice
-
+  
   case "${choice,,}" in
-    1)
-      if require_installed; then open_terminal_foreground; fi
-      ;;
+    0) update_check_fn ;;
+    1) if require_installed; then open_terminal_foreground; fi ;;
     2) start_headless_fn || true ;;
     3) stop_fn || true ;;
     4) stop_fn || true; start_headless_fn || true ;;
-    5)
-      if [[ ! -f "$LOG" ]]; then echo "No log yet: $LOG"; brief_pause; else open_terminal_tail; fi
-      ;;
+    5) if [[ ! -f "$LOG" ]]; then echo "No log yet: $LOG"; brief_pause; else open_terminal_tail; fi ;;
     6) shell_fn ;;
     7) export_req ;;
     8) install_fn ;;
