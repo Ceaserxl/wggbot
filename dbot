@@ -161,19 +161,23 @@ WRAP
 
 install_fn() {
   if [[ -d "$VENV_DIR" ]]; then
-    read -r -p "venv exists. Reinstall (delete and recreate venv + portable Python)? [y/N]: " ans
-    if [[ "$ans" =~ ^[Yy]$ ]]; then
-      echo "Removing $VENV_DIR ..."
-      rm -rf -- "$VENV_DIR"
-      echo "Removing portable Python folder ${EMBED_DIR} ..."
-      rm -rf -- "$EMBED_DIR" 2>/dev/null || true
-    else
-      echo "Keeping existing venv; skipping venv creation and deps."
-      install_global_wrapper
-      echo "Install complete."
-      brief_pause
-      return 0
-    fi
+    echo "Removing $VENV_DIR ..."
+    rm -rf -- "$VENV_DIR"
+    echo "Removing portable Python folder ${EMBED_DIR} ..."
+    rm -rf -- "$EMBED_DIR" 2>/dev/null || true
+    # read -r -p "venv exists. Reinstall (delete and recreate venv + portable Python)? [y/N]: " ans
+    # if [[ "$ans" =~ ^[Yy]$ ]]; then
+    #   echo "Removing $VENV_DIR ..."
+    #   rm -rf -- "$VENV_DIR"
+    #   echo "Removing portable Python folder ${EMBED_DIR} ..."
+    #   rm -rf -- "$EMBED_DIR" 2>/dev/null || true
+    # else
+    #   echo "Keeping existing venv; skipping venv creation and deps."
+    #   install_global_wrapper
+    #   echo "Install complete."
+    #   brief_pause
+    #   return 0
+    # fi
   fi
 
   mkdir -p "$EMBED_DIR"
