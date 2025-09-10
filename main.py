@@ -23,7 +23,7 @@ from resources.ollama import query_ollama
 from resources.ollama import handle_ollama_response
 
 # ── Constants ────────────────────────────────────────────────────────────
-OLLAMA_CHANNEL_ID = keys.OLLAMA_CHANNEL_ID
+OLLAMA_CHANNEL = keys.OLLAMA_CHANNEL
 
 # ── Logging Setup ────────────────────────────────────────────────────────
 t = logging.getLogger()
@@ -170,7 +170,7 @@ async def on_message(message):
         else message.channel.id
     )
 
-    if channel_id == OLLAMA_CHANNEL_ID:
+    if channel_id == OLLAMA_CHANNEL:
         bot.loop.create_task(handle_ollama_response(message))
         return
 
