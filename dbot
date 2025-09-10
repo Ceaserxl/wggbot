@@ -292,23 +292,15 @@ update_check_fn() {
   [[ "$local_hash" == "$remote_hash" ]] && { echo "Already up-to-date."; brief_pause; return 0; }
 
   echo
-  read -r -p "Stop bot, update, and PRESERVE .env? [y/N]: " ans
+  read -r -p "Stop bot, update to newest, then run Install? [y/N]: " ans
   [[ "$ans" =~ ^[Yy]$ ]] || return 0
   is_running && stop_fn || true
 
-  # paths to preserve
-  local -a PRESERVE=( ".env" )
-  local backup; backup="$(mktemp -d)"
-  for p in "${PRESERVE[@]}"; do
-    [[ -e "$p" ]] && { mkdir -p "$backup/$(dirname "$p")"; cp -a "$p" "$backup/$p"; }
-  done
-
   if [[ -d .git ]]; then
-    echo "Resetting to remote and cleaning untracked (but KEEPING ignored like .env)..."
+    echo "Resetting to remote and cleaning untracked (ignored files preserved by .gitignore)..."
     git fetch --all --prune
     git reset --hard "$remote_hash"
-    # NOTE: no -x flag, so ignored files (e.g., .env in .gitignore) are preserved
-    git clean -df
+    git clean -df        # NOTE: no -x => ignored files (e.g., .env) are kept if listed in .gitignore
   else
     echo "Not a git repo: re-cloning…"
     local tmpdir; tmpdir="$(mktemp -d)"
@@ -320,13 +312,10 @@ update_check_fn() {
     shopt -u dotglob
   fi
 
-  # restore preserved files
-  for p in "${PRESERVE[@]}"; do
-    [[ -e "$backup/$p" ]] && { mkdir -p "$(dirname "$p")"; cp -a "$backup/$p" "$p"; }
-  done
-  rm -rf "$backup"
+  echo "Code updated. Running Install..."
+  install_fn
 
-  echo "Update complete (preserved: ${PRESERVE[*]})."
+  echo "Update + Install complete."
   brief_pause
 }
 
