@@ -13,6 +13,7 @@ set "MAIN=main.py"
 set "WVENV_DIR=wvenv"
 set "WVENV_PY=%WVENV_DIR%\Scripts\python.exe"
 set "ACTIVATOR=%WVENV_DIR%\Scripts\activate.bat"
+set "REPO_URL=https://github.com/Ceaserxl/wggbot.git"
 
 REM Choose a Python for running (prefer venv if present; no extraction here)
 if exist "%WVENV_PY%" (
@@ -35,6 +36,7 @@ echo [6] Shell ^(activate wvenv^)
 echo [7] Export requirements.txt
 echo [8] Install / Reinstall wvenv + deps  ^(extract on demand^)
 echo [9] Wipe  ^(delete wvenv + resources\python313\win-x64^)
+echo [0] Check for updates ^(then Install^)
 echo [Q] Quit
 echo.
 set "choice="
@@ -49,16 +51,15 @@ if /i "%choice%"=="6" goto shell
 if /i "%choice%"=="7" goto export
 if /i "%choice%"=="8" goto install
 if /i "%choice%"=="9" goto wipe_only
+if /i "%choice%"=="0" goto update_check
 if /i "%choice%"=="q" goto :eof
 goto menu
 
 REM ---------- helpers ----------
 :brief_pause
-REM show errors briefly, no user input needed
 timeout /t 2 /nobreak >nul
 exit /b 0
 
-REM Common precheck for Start (1) and Start headless (2)
 :start_precheck_fn
 if not exist "%ACTIVATOR%" (
   echo Missing: %ACTIVATOR%
@@ -102,7 +103,6 @@ if errorlevel 1 exit /b 1
 
 echo Starting %MAIN% headless...
 set "RUNLINE=""%MAIN%"" >> ""%LOG%"" 2^>^&1"
-
 for /f "usebackq delims=" %%P in (`
   powershell -NoProfile -Command ^
     "$p = Start-Process -FilePath 'cmd.exe' -ArgumentList @('/c','""%WVENV_PY%"" %RUNLINE%') -WindowStyle Hidden -PassThru; $p.Id"
@@ -143,7 +143,6 @@ if not exist "%LOG%" (
   call :brief_pause
   goto menu
 )
-REM Open tail in a separate window so you can close it cleanly
 start "dbot log - %SESSION%" powershell -NoProfile -NoLogo -Command ^
   "Write-Host 'Tailing %LOG% (close this window to exit)...'; Get-Content -Path '%LOG%' -Wait -Tail 50"
 goto menu
@@ -188,7 +187,6 @@ if exist "%WVENV_DIR%" (
   )
 )
 
-REM ------- Extract Python from resources\python313 into win-x64 (STATIC NAME) -------
 set "EMBED_BASE=resources\python313"
 set "EMBED_DIR=%EMBED_BASE%\win-x64"
 set "EMBED_PY="
@@ -204,16 +202,13 @@ if not exist "%ARCHIVE%" (
 )
 
 echo Extracting cpython-3.13.7windows.tar.gz to %EMBED_DIR% ...
-REM Do NOT strip components; layout may contain a "python\" directory.
 tar -xf "%ARCHIVE%" -C "%EMBED_DIR%"
 
-REM Locate python.exe after extraction (handle common layouts)
 if exist "%EMBED_DIR%\python\python.exe" (
   set "EMBED_PY=%EMBED_DIR%\python\python.exe"
 ) else if exist "%EMBED_DIR%\python.exe" (
   set "EMBED_PY=%EMBED_DIR%\python.exe"
 ) else (
-  REM Try one more common nesting level (e.g., win-x64\*\python\python.exe)
   for /d %%D in ("%EMBED_DIR%\*") do (
     if exist "%%~fD\python\python.exe" set "EMBED_PY=%%~fD\python\python.exe"
     if exist "%%~fD\python.exe" set "EMBED_PY=%%~fD\python.exe"
@@ -230,7 +225,6 @@ if not defined EMBED_PY (
 echo Embedded Python ready: %EMBED_PY%
 
 :after_extract
-REM Choose creator for venv
 if defined EMBED_PY (
   set "CREATOR=%EMBED_PY%"
 ) else (
@@ -276,5 +270,71 @@ echo Deleting portable Python (resources\python313\win-x64) ...
 rmdir /s /q "resources\python313\win-x64" 2>nul
 
 echo Wipe complete.
+call :brief_pause
+goto menu
+
+:update_check
+set "GIT_TERMINAL_PROMPT=0"
+where git >nul 2>nul || (
+  echo git is not installed. Get Git for Windows: https://git-scm.com/download/win
+  call :brief_pause
+  goto menu
+)
+
+echo Checking remote HEAD for %REPO_URL% ...
+set "REMOTE_HASH="
+for /f "usebackq tokens=1" %%H in (`git ls-remote -h "%REPO_URL%" HEAD 2^>nul`) do set "REMOTE_HASH=%%H"
+
+if not defined REMOTE_HASH (
+  for /f "usebackq delims=" %%J in (`
+    powershell -NoProfile -Command "(Invoke-RestMethod -UseBasicParsing https://api.github.com/repos/Ceaserxl/wggbot/commits/HEAD).sha"
+  `) do set "REMOTE_HASH=%%J"
+)
+
+if not defined REMOTE_HASH (
+  echo Failed to query remote hash. Check network/auth.
+  call :brief_pause
+  goto menu
+)
+
+set "LOCAL_HASH=(none)"
+if exist ".git" (
+  for /f "usebackq delims=" %%L in (`git rev-parse HEAD 2^>nul`) do set "LOCAL_HASH=%%L"
+)
+
+echo Local : %LOCAL_HASH%
+echo Remote: %REMOTE_HASH%
+
+if /i "%LOCAL_HASH%"=="%REMOTE_HASH%" (
+  echo Already up-to-date.
+  call :brief_pause
+  goto menu
+)
+
+echo.
+set "ans="
+set /p "ans=Stop bot, update to newest, then run Install? [y/N]: "
+if /i not "%ans%"=="y" goto menu
+
+if exist ".dbot.pid" call :stop_fn
+
+if exist ".git" (
+  echo Resetting to remote and cleaning untracked (ignored files preserved by .gitignore)...
+  git fetch --all --prune
+  git reset --hard %REMOTE_HASH%
+  git clean -df
+) else (
+  echo Bootstrapping git in current folder...
+  git init
+  git remote add origin "%REPO_URL%" 2>nul
+  git fetch --depth=1 origin
+  git reset --hard %REMOTE_HASH%
+  git clean -df
+)
+
+echo Code updated. Running Install...
+call :install
+
+echo Update + Install complete.
 call :brief_pause
 goto menu
