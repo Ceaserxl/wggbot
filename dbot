@@ -277,48 +277,38 @@ update_check_fn() {
 
   echo "Checking remote HEAD for $REPO_URL ..."
   local remote_hash=""
-  # Try git first (fast, no API limits)
   remote_hash="$(git -c http.lowSpeedLimit=1 -c http.lowSpeedTime=5 ls-remote -h "$REPO_URL" HEAD 2>/dev/null | awk '{print $1}')"
-
-  # Fallback via GitHub API if git/SSL has issues
   if [[ -z "$remote_hash" ]]; then
     remote_hash="$(curl -fsSL https://api.github.com/repos/Ceaserxl/wggbot/commits/HEAD \
       | sed -n 's/.*"sha": *"\([0-9a-f]\{40\}\)".*/\1/p' | head -n1 || true)"
   fi
-
-  if [[ -z "$remote_hash" ]]; then
-    echo "Failed to query remote hash (check network/SSL)."
-    echo "Tips: ensure 'git' & 'ca-certificates' installed; try:  curl https://github.com  "
-    brief_pause
-    return 1
-  fi
+  [[ -n "$remote_hash" ]] || { echo "Failed to query remote hash."; brief_pause; return 1; }
 
   local local_hash="(none)"
-  if [[ -d .git ]]; then
-    local_hash="$(git rev-parse HEAD 2>/dev/null || echo '(unknown)')"
-  fi
+  [[ -d .git ]] && local_hash="$(git rev-parse HEAD 2>/dev/null || echo '(unknown)')"
 
   echo "Local : $local_hash"
   echo "Remote: $remote_hash"
-
-  if [[ "$local_hash" == "$remote_hash" ]]; then
-    echo "Already up-to-date."
-    brief_pause
-    return 0
-  fi
+  [[ "$local_hash" == "$remote_hash" ]] && { echo "Already up-to-date."; brief_pause; return 0; }
 
   echo
-  echo "An update is available."
-  read -r -p "Stop bot, WIPE folder, and pull latest? [y/N]: " ans
+  read -r -p "Stop bot, update, and PRESERVE .env? [y/N]: " ans
   [[ "$ans" =~ ^[Yy]$ ]] || return 0
-
   is_running && stop_fn || true
 
+  # paths to preserve
+  local -a PRESERVE=( ".env" )
+  local backup; backup="$(mktemp -d)"
+  for p in "${PRESERVE[@]}"; do
+    [[ -e "$p" ]] && { mkdir -p "$backup/$(dirname "$p")"; cp -a "$p" "$backup/$p"; }
+  done
+
   if [[ -d .git ]]; then
-    echo "Resetting to remote and wiping untracked files..."
+    echo "Resetting to remote and cleaning untracked (but KEEPING ignored like .env)..."
     git fetch --all --prune
     git reset --hard "$remote_hash"
-    git clean -xdf
+    # NOTE: no -x flag, so ignored files (e.g., .env in .gitignore) are preserved
+    git clean -df
   else
     echo "Not a git repo: re-cloning…"
     local tmpdir; tmpdir="$(mktemp -d)"
@@ -330,7 +320,13 @@ update_check_fn() {
     shopt -u dotglob
   fi
 
-  echo "Update complete."
+  # restore preserved files
+  for p in "${PRESERVE[@]}"; do
+    [[ -e "$backup/$p" ]] && { mkdir -p "$(dirname "$p")"; cp -a "$backup/$p" "$p"; }
+  done
+  rm -rf "$backup"
+
+  echo "Update complete (preserved: ${PRESERVE[*]})."
   brief_pause
 }
 
