@@ -319,7 +319,7 @@ if /i not "%ans%"=="y" goto menu
 if exist ".dbot.pid" call :stop_fn
 
 if exist ".git" (
-  echo Resetting to remote and cleaning untracked (ignored files preserved by .gitignore)...
+  echo Resetting to remote and cleaning untracked ^(ignored files preserved by .gitignore^)...
   git fetch --all --prune
   git reset --hard %REMOTE_HASH%
   git clean -df
