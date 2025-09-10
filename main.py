@@ -23,8 +23,7 @@ from resources.ollama import query_ollama
 from resources.ollama import handle_ollama_response
 
 # ── Constants ────────────────────────────────────────────────────────────
-OLLAMA_LIVE_CHANNEL_ID = keys.OLLAMA_LIVE_CHANNEL_ID
-OLLAMA_BETA_CHANNEL_ID = keys.OLLAMA_BETA_CHANNEL_ID
+OLLAMA_CHANNEL_ID = keys.OLLAMA_CHANNEL_ID
 
 # ── Logging Setup ────────────────────────────────────────────────────────
 t = logging.getLogger()
@@ -106,11 +105,11 @@ async def disconnect(interaction: discord.Interaction):
         await interaction.response.defer()
         await handle_disconnect_command(interaction)
 
-@bot.tree.command(name="image", description="Generate an image using Dall-E.")
-async def image(interaction: discord.Interaction, prompt: str):
-    print("Executing /image")
-    await interaction.response.defer(thinking=True)
-    await generate_and_send_image(interaction, prompt)
+# @bot.tree.command(name="image", description="Generate an image using Dall-E.")
+# async def image(interaction: discord.Interaction, prompt: str):
+#     print("Executing /image")
+#     await interaction.response.defer(thinking=True)
+#     await generate_and_send_image(interaction, prompt)
 
 @bot.tree.command(name="imagine", description="Generate an image using Stable Diffusion")
 @app_commands.choices(
@@ -171,7 +170,7 @@ async def on_message(message):
         else message.channel.id
     )
 
-    if channel_id == OLLAMA_BETA_CHANNEL_ID or channel_id == OLLAMA_LIVE_CHANNEL_ID:
+    if channel_id == OLLAMA_CHANNEL_ID:
         bot.loop.create_task(handle_ollama_response(message))
         return
 

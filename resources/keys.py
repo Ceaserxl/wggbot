@@ -27,8 +27,10 @@ OLLAMA_MODEL            = "qwen2:1.5b"
 # ── Platform-Specific Overrides ─────────────────────────────────────────
 if DEBUG:
     DISCORD_TOKEN = BETA_DISCORD_TOKEN
+    OLLAMA_CHANNEL = OLLAMA_BETA_CHANNEL_ID
 else:
     DISCORD_TOKEN = LIVE_DISCORD_TOKEN
+    OLLAMA_CHANNEL = OLLAMA_LIVE_CHANNEL_ID
 
 # ── ChatGPT Model Configuration ────────────────────────────────────────
 CHATGPT_MODEL = "gpt-4.1-nano"
