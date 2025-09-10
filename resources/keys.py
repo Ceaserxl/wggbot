@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 
-DEBUG              = True
+DEBUG              = False
 LIVE_DISCORD_TOKEN = os.getenv('LIVE_DISCORD_TOKEN')
 BETA_DISCORD_TOKEN = os.getenv('BETA_DISCORD_TOKEN')
 OPENAI_API_KEY     = os.getenv('OPENAI_API_KEY')
@@ -27,7 +27,7 @@ OLLAMA_MODEL       = "qwen2:1.5b"
 
 
 # ── Platform-Specific Overrides ─────────────────────────────────────────
-if not DEBUG:
+if DEBUG:
     DISCORD_TOKEN = BETA_DISCORD_TOKEN
 else:
     DISCORD_TOKEN = LIVE_DISCORD_TOKEN
