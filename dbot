@@ -178,6 +178,7 @@ install_fn() {
     #   brief_pause
     #   return 0
     # fi
+    
   fi
 
   mkdir -p "$EMBED_DIR"
