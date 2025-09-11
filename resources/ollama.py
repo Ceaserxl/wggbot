@@ -19,7 +19,7 @@ _initialized_threads = set()
 
 # ── Ollama Query ─────────────────────────────────────────────────────────
 async def query_ollama(prompt: str, model: str = keys.OLLAMA_MODEL) -> str:
-
+    print("Ollama request sent to IP Address: " + keys.OLLAMA_IP)
     # Sends the given prompt to Ollama, first performing a health check.
     async with aiohttp.ClientSession() as session:
         # Health check + error handling

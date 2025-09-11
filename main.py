@@ -159,9 +159,9 @@ async def on_message(message):
         return
 
     # DMs
-    if isinstance(message.channel, discord.DMChannel):
-        await handle_dm_message(message)
-        return
+    # if isinstance(message.channel, discord.DMChannel):
+    #     await handle_dm_message(message)
+    #     return
 
     # figure out the “real” channel ID: thread->parent, else itself
     channel_id = (
