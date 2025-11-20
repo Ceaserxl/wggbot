@@ -44,39 +44,31 @@ action_start() {
 
     echo "🔍 Checking container state..."
 
-    # Create container if missing
+    # Create container if missing — DO NOT start bot here
     if ! container_exists; then
         echo "📦 Container not found — creating with compose..."
         docker compose -f "$COMPOSE" up -d
-        echo "⏳ Waiting for container boot..."
-        sleep 2
-
-        echo "🚀 Starting bot..."
-        start_bot_inside
-
         attach_logs
         return
     fi
 
-    # If exists but not running -> start container
+    # If exists but NOT running — DO NOT start bot
     if ! container_running; then
         echo "🐳 Starting container..."
         docker start "$CONTAINER"
-        echo "🚀 Starting bot..."
-        start_bot_inside
         attach_logs
         return
     fi
 
-    # If bot already running
+    # If container is running and bot is already active
     if bot_running; then
-        echo "⚠️ Bot is already running inside container."
+        echo "⚠️ Bot already running."
         attach_logs
         return
     fi
 
-    # If container is running but bot is not
-    echo "🐳 Container running — starting bot..."
+    # Container running but bot not running — START THE BOT HERE ONLY
+    echo "🚀 Starting bot inside container..."
     start_bot_inside
     attach_logs
 }
@@ -91,20 +83,13 @@ action_stop() {
         return
     fi
 
-    if ! container_running; then
-        echo "❌ Container is not running."
-        pause
-        return
+    if container_running; then
+        echo "⛔ Stopping container..."
+        docker stop "$CONTAINER"
+    else
+        echo "⚠️ Container already stopped."
     fi
 
-    if ! bot_running; then
-        echo "⚠️ Bot is NOT running."
-        pause
-        return
-    fi
-
-    echo "⛔ Stopping bot..."
-    docker exec "$CONTAINER" pkill -f "python .*main.py" || true
     pause
 }
 
