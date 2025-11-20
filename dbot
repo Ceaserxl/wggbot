@@ -1,361 +1,194 @@
 #!/usr/bin/env bash
-# dbot — Linux manager for your Discord bot (venv + menu)
-# Portable Python is extracted only during Install (option 8).
-# Detects x86_64 vs Raspberry Pi (arm/aarch64) and uses static archive names:
-#   - x86_64  -> resources/python313/cpython-3.13.7linux.tar.xz
-#   - rpi/arm -> resources/python313/cpython-3.13.7rpi.tar.gz
-# Option 8 also installs a global "dbot" wrapper in /usr/local/bin or ~/.local/bin
-
 set -Eeuo pipefail
 
-# --- Move to script directory ---
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
-
-# --- Config (auto) ---
-SESSION="$(basename "$SCRIPT_DIR")"
-LOG="${SESSION}.log"
-MAIN="main.py"
-VENV_DIR="venv"                       # Linux uses 'venv' (Windows uses 'wvenv')
-VENV_PY="${VENV_DIR}/bin/python"
-ACTIVATOR="${VENV_DIR}/bin/activate"
-REPO_URL="https://github.com/Ceaserxl/wggbot.git"
-
-# --- Arch-specific portable Python (static filenames) ---
-EMBED_BASE="resources/python313"
-ARCH="$(uname -m || true)"
-if [[ "$ARCH" == "x86_64" ]]; then
-  ARCH_LABEL="linux-x64"
-  ARCHIVE="${EMBED_BASE}/cpython-3.13.7linux.tar.xz"
-elif [[ "$ARCH" == "aarch64" || "$ARCH" == "armv7l" || "$ARCH" == arm* ]]; then
-  ARCH_LABEL="rpi"
-  ARCHIVE="${EMBED_BASE}/cpython-3.13.7rpi.tar.gz"
-else
-  ARCH_LABEL="linux-unknown"
-  ARCHIVE="${EMBED_BASE}/cpython-3.13.7linux.tar.xz"
+# Require sudo
+if [[ $EUID -ne 0 ]]; then
+    echo "❌ Run with sudo:  sudo ./dbot"
+    exit 1
 fi
-EMBED_DIR="${EMBED_BASE}/${ARCH_LABEL}"
 
-brief_pause() { sleep 2; }
+CONTAINER="wggbot"
+COMPOSE="docker-compose.yml"
 
-require_installed() {
-  if [[ ! -f "$ACTIVATOR" ]]; then
-    echo "Missing: $ACTIVATOR"
-    echo "Run Install (option 8) first."
-    brief_pause
-    return 1
-  fi
-  if [[ ! -x "$VENV_PY" ]]; then
-    echo "Missing: $VENV_PY"
-    echo "Run Install (option 8) first."
-    brief_pause
-    return 1
-  fi
-  return 0
+pause() { read -rp "Press ENTER to continue..."; }
+
+# -------------------------------
+# Docker helpers
+# -------------------------------
+container_exists() {
+    docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER}$"
 }
 
-is_running() {
-  [[ -f .dbot.pid ]] || return 1
-  local pid; pid="$(< .dbot.pid)"
-  [[ -n "$pid" && -d "/proc/$pid" ]] || return 1
-  return 0
+container_running() {
+    docker ps --format '{{.Names}}' | grep -q "^${CONTAINER}$"
 }
 
-start_headless_fn() {
-  require_installed || return 1
-  if is_running; then
-    echo "Already running headless (PID $(< .dbot.pid)). Stop it first (option 3)."
-    brief_pause
-    return 1
-  fi
-  echo "Starting ${MAIN} headless..."
-  nohup bash -lc "source '$ACTIVATOR'; exec python '$MAIN'" >>"$LOG" 2>&1 &
-  echo $! > .dbot.pid
-  echo "Started (PID $(< .dbot.pid)) - logging to '$LOG'"
-  sleep 1
-  return 0
+bot_running() {
+    docker exec "$CONTAINER" pgrep -f "python .*main.py" >/dev/null 2>&1
 }
 
-stop_fn() {
-  if ! is_running; then
-    echo "No headless PID file; nothing to stop. If you used Start, Ctrl+C that window."
-    brief_pause
-    return 1
-  fi
-  local pid; pid="$(< .dbot.pid)"
-  echo "Stopping PID $pid ..."
-  kill "$pid" 2>/dev/null || true
-  sleep 1
-  [[ -d "/proc/$pid" ]] && kill -9 "$pid" 2>/dev/null || true
-  rm -f .dbot.pid
-  echo "Stopped."
-  sleep 1
-  return 0
+start_bot_inside() {
+    echo "🚀 Starting bot inside container..."
+    docker exec -d "$CONTAINER" bash -lc "source /app/venv/bin/activate && python /app/main.py"
 }
 
-open_terminal_tail() {
-  if command -v gnome-terminal >/dev/null 2>&1; then
-    gnome-terminal -- bash -lc "echo 'Tailing $LOG (close this window to exit)...'; tail -n 50 -F '$LOG'"
-  elif command -v xfce4-terminal >/dev/null 2>&1; then
-    xfce4-terminal -- bash -lc "echo 'Tailing $LOG (close this window to exit)...'; tail -n 50 -F '$LOG'"
-  elif command -v konsole >/dev/null 2>&1; then
-    konsole -e bash -lc "echo 'Tailing $LOG (close this window to exit)...'; tail -n 50 -F '$LOG'"
-  elif command -v xterm >/dev/null 2>&1; then
-    xterm -e bash -lc "echo 'Tailing $LOG (close this window to exit)...'; tail -n 50 -F '$LOG'"
-  else
-    echo "No separate terminal found; showing inline tail (Ctrl+C to return)..."
-    tail -n 50 -F "$LOG"
-  fi
+attach_logs() {
+    echo "📜 Attaching to logs (Ctrl+C to detach)..."
+    docker logs -f "$CONTAINER"
 }
 
-open_terminal_foreground() {
-  local run="source '$ACTIVATOR'; python '$MAIN'; echo; echo 'Process exited. Close this window.'; exec bash"
-  if command -v gnome-terminal >/dev/null 2>&1; then
-    gnome-terminal -- bash -lc "$run"
-  elif command -v xfce4-terminal >/dev/null 2>&1; then
-    xfce4-terminal -- bash -lc "$run"
-  elif command -v konsole >/dev/null 2>&1; then
-    konsole -e bash -lc "$run"
-  elif command -v xterm >/dev/null 2>&1; then
-    xterm -e bash -lc "$run"
-  else
-    echo "No terminal emulator detected. Running in this shell (Ctrl+C to stop)."
-    bash -lc "source '$ACTIVATOR'; exec python '$MAIN'"
-  fi
+# -------------------------------
+# ACTION: START
+# -------------------------------
+action_start() {
+
+    echo "🔍 Checking container state..."
+
+    # Create container if missing
+    if ! container_exists; then
+        echo "📦 Container not found — creating with compose..."
+        docker compose -f "$COMPOSE" up -d
+        echo "⏳ Waiting for container boot..."
+        sleep 2
+
+        echo "🚀 Starting bot..."
+        start_bot_inside
+
+        attach_logs
+        return
+    fi
+
+    # If exists but not running -> start container
+    if ! container_running; then
+        echo "🐳 Starting container..."
+        docker start "$CONTAINER"
+        echo "🚀 Starting bot..."
+        start_bot_inside
+        attach_logs
+        return
+    fi
+
+    # If bot already running
+    if bot_running; then
+        echo "⚠️ Bot is already running inside container."
+        attach_logs
+        return
+    fi
+
+    # If container is running but bot is not
+    echo "🐳 Container running — starting bot..."
+    start_bot_inside
+    attach_logs
 }
 
-install_global_wrapper() {
-  # Install global 'dbot' wrapper that finds nearest ./dbot or ./dbot.sh
-  local dest="/usr/local/bin/dbot"
-  if [[ ! -w "/usr/local/bin" ]]; then
-    dest="$HOME/.local/bin/dbot"
-    mkdir -p "$HOME/.local/bin"
-  fi
+# -------------------------------
+# ACTION: STOP
+# -------------------------------
+action_stop() {
+    if ! container_exists; then
+        echo "❌ Container does not exist."
+        pause
+        return
+    fi
 
-  cat >"$dest" <<'WRAP'
-#!/usr/bin/env bash
-find_up() {
-  local d="$PWD"
-  while :; do
-    if [[ -x "$d/dbot" ]]; then echo "$d/dbot"; return 0; fi
-    if [[ -x "$d/dbot.sh" ]]; then echo "$d/dbot.sh"; return 0; fi
-    [[ "$d" == "/" ]] && return 1
-    d="$(dirname "$d")"
-  done
-}
-script="$(find_up)"
-if [[ -n "$script" ]]; then
-  exec "$script" "$@"
-else
-  echo "dbot: no ./dbot found in current or parent dirs." >&2
-  exit 1
-fi
-WRAP
+    if ! container_running; then
+        echo "❌ Container is not running."
+        pause
+        return
+    fi
 
-  chmod +x "$dest"
-  echo "Installed global 'dbot' at: $dest"
-  if [[ "$dest" == "$HOME/.local/bin/dbot" ]] && ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
-    echo "Add to PATH:  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc && source ~/.bashrc"
-  fi
+    if ! bot_running; then
+        echo "⚠️ Bot is NOT running."
+        pause
+        return
+    fi
+
+    echo "⛔ Stopping bot..."
+    docker exec "$CONTAINER" pkill -f "python .*main.py" || true
+    pause
 }
 
-install_fn() {
-  if [[ -d "$VENV_DIR" ]]; then
-    echo "Removing $VENV_DIR ..."
-    rm -rf -- "$VENV_DIR"
-    echo "Removing portable Python folder ${EMBED_DIR} ..."
-    rm -rf -- "$EMBED_DIR" 2>/dev/null || true
-    # read -r -p "venv exists. Reinstall (delete and recreate venv + portable Python)? [y/N]: " ans
-    # if [[ "$ans" =~ ^[Yy]$ ]]; then
-    #   echo "Removing $VENV_DIR ..."
-    #   rm -rf -- "$VENV_DIR"
-    #   echo "Removing portable Python folder ${EMBED_DIR} ..."
-    #   rm -rf -- "$EMBED_DIR" 2>/dev/null || true
-    # else
-    #   echo "Keeping existing venv; skipping venv creation and deps."
-    #   install_global_wrapper
-    #   echo "Install complete."
-    #   brief_pause
-    #   return 0
-    # fi
-    
-  fi
-
-  mkdir -p "$EMBED_DIR"
-
-  if [[ ! -f "$ARCHIVE" ]]; then
-    echo "Missing archive: $ARCHIVE"
-    echo "Place the file with EXACT name above, then run Install again."
-    brief_pause
-    return 1
-  fi
-
-  echo "Extracting $(basename "$ARCHIVE") to $EMBED_DIR ..."
-  if [[ "$ARCHIVE" == *.tar.xz ]]; then
-    command -v xz >/dev/null 2>&1 || { echo "'xz' not found. Install xz-utils."; brief_pause; return 1; }
-    tar -xJf "$ARCHIVE" -C "$EMBED_DIR"
-  else
-    tar -xzf "$ARCHIVE" -C "$EMBED_DIR"
-  fi
-
-  EMBED_PY=""
-  if [[ -x "$EMBED_DIR/bin/python3" ]]; then
-    EMBED_PY="$EMBED_DIR/bin/python3"
-  elif [[ -x "$EMBED_DIR/python/bin/python3" ]]; then
-    EMBED_PY="$EMBED_DIR/python/bin/python3"
-  else
-    mapfile -t hits < <(find "$EMBED_DIR" -maxdepth 3 -type f -perm -111 -name "python3" 2>/dev/null || true)
-    [[ ${#hits[@]} -gt 0 ]] && EMBED_PY="${hits[0]}"
-  fi
-
-  if [[ -z "$EMBED_PY" ]]; then
-    echo "Extraction finished but python3 was not found under $EMBED_DIR."
-    echo "Check archive contents or adjust detection paths."
-    brief_pause
-    return 1
-  fi
-
-  echo "Embedded Python ready: $EMBED_PY"
-
-  echo "Creating virtual environment: $VENV_DIR ..."
-  "$EMBED_PY" -m ensurepip -U
-  "$EMBED_PY" -m pip install -U pip
-  "$EMBED_PY" -m venv "$VENV_DIR" || { echo "Failed to create venv."; brief_pause; return 1; }
-
-  echo "Upgrading pip in venv ..."
-  "$VENV_PY" -m pip install --upgrade pip
-
-  if [[ -f "requirements.txt" ]]; then
-    echo "Installing requirements.txt ..."
-    "$VENV_PY" -m pip install -r requirements.txt || { echo "requirements install failed"; brief_pause; return 1; }
-  else
-    echo "No requirements.txt found; skipping dependency install."
-  fi
-
-  install_global_wrapper
-
-  echo "Install complete."
-  brief_pause
-  return 0
+# -------------------------------
+# ACTION: RESTART
+# -------------------------------
+action_restart() {
+    action_stop
+    sleep 1
+    action_start
 }
 
-wipe_only() {
-  echo "This will delete the venv and portable Python. No reinstall will be performed."
-  read -r -p "Proceed? [y/N]: " ans
-  [[ "$ans" =~ ^[Yy]$ ]] || return 0
-
-  is_running && stop_fn || true
-
-  echo "Deleting $VENV_DIR ..."
-  rm -rf -- "$VENV_DIR" 2>/dev/null || true
-
-  echo "Deleting portable Python ($EMBED_DIR) ..."
-  rm -rf -- "$EMBED_DIR" 2>/dev/null || true
-
-  echo "Wipe complete."
-  brief_pause
+# -------------------------------
+# ACTION: CONTAINER SHELL
+# -------------------------------
+action_shell() {
+    if ! container_exists; then echo "❌ Container does not exist."; pause; return; fi
+    docker exec -it "$CONTAINER" bash
 }
 
-export_req() {
-  if [[ ! -x "$VENV_PY" ]]; then
-    echo "$VENV_PY not found. Run Install (option 8) first."
-    brief_pause
-    return
-  fi
-  echo "Exporting requirements to requirements.txt ..."
-  "$VENV_PY" -m pip freeze > requirements.txt && echo "Saved: requirements.txt" || echo "Export failed."
-  brief_pause
+# -------------------------------
+# ACTION: VIEW LOGS
+# -------------------------------
+action_logs() {
+    if ! container_running; then echo "❌ Container not running."; pause; return; fi
+    docker logs -f "$CONTAINER"
 }
 
-shell_fn() {
-  if [[ ! -f "$ACTIVATOR" ]]; then
-    echo "$ACTIVATOR not found. Run Install (option 8) to create venv."
-    brief_pause
-    return
-  fi
-  bash --rcfile <(echo "source '$ACTIVATOR'") -i
+# -------------------------------
+# ACTION: DESTROY CONTAINER
+# -------------------------------
+action_destroy_container() {
+
+    echo "⚠️ WARNING: This will completely destroy:"
+    echo "   • Docker container"
+    echo "   • Docker volumes for this project"
+    echo "   • local venv directory"
+    echo "   • extracted portable python"
+
+    read -rp "Type YES to confirm: " confirm
+    if [[ "$confirm" != "YES" ]]; then
+        echo "❌ Aborted."
+        pause
+        return
+    fi
+
+    echo "🧨 Taking down container with docker compose..."
+    docker compose -f "$COMPOSE" down || true
+
+    echo "🗑 Removing local venv directory..."
+    rm -rfv venv || true
+
+    echo "🗑 Removing extracted portable python..."
+    rm -rfv resources/python313/extracted || true
+
+    echo "✔ Destroy complete."
+    pause
 }
 
-# --- Update check & pull (option 0) ---
-update_check_fn() {
-  command -v git >/dev/null 2>&1 || { echo "git is not installed."; brief_pause; return 1; }
+# -------------------------------
+# MENU
+# -------------------------------
+while true; do
+    clear
+    echo "======================================="
+    echo "          DBOT DOCKER MANAGER"
+    echo "======================================="
+    echo "[1] Start Bot (attach to logs)"
+    echo "[2] Stop Bot"
+    echo "[3] Restart Bot"
+    echo "[4] Shell Into Container"
+    echo "[5] View Logs"
+    echo "[6] Destroy Container + Wipe Environment"
+    echo "[Q] Quit"
+    echo "---------------------------------------"
+    read -rp "Select an option: " choice
 
-  echo "Checking remote HEAD for $REPO_URL ..."
-  local remote_hash=""
-  remote_hash="$(git -c http.lowSpeedLimit=1 -c http.lowSpeedTime=5 ls-remote -h "$REPO_URL" HEAD 2>/dev/null | awk '{print $1}')"
-  if [[ -z "$remote_hash" ]]; then
-    remote_hash="$(curl -fsSL https://api.github.com/repos/Ceaserxl/wggbot/commits/HEAD \
-      | sed -n 's/.*"sha": *"\([0-9a-f]\{40\}\)".*/\1/p' | head -n1 || true)"
-  fi
-  [[ -n "$remote_hash" ]] || { echo "Failed to query remote hash."; brief_pause; return 1; }
-
-  local local_hash="(none)"
-  [[ -d .git ]] && local_hash="$(git rev-parse HEAD 2>/dev/null || echo '(unknown)')"
-
-  echo "Local : $local_hash"
-  echo "Remote: $remote_hash"
-  [[ "$local_hash" == "$remote_hash" ]] && { echo "Already up-to-date."; brief_pause; return 0; }
-
-  echo
-  read -r -p "Stop bot, update to newest, then run Install? [y/N]: " ans
-  [[ "$ans" =~ ^[Yy]$ ]] || return 0
-  is_running && stop_fn || true
-
-  if [[ -d .git ]]; then
-    echo "Resetting to remote and cleaning untracked (ignored files preserved by .gitignore)..."
-    git fetch --all --prune
-    git reset --hard "$remote_hash"
-    git clean -df        # NOTE: no -x => ignored files (e.g., .env) are kept if listed in .gitignore
-  else
-    echo "Not a git repo: re-cloning…"
-    local tmpdir; tmpdir="$(mktemp -d)"
-    git clone --depth=1 "$REPO_URL" "$tmpdir/newrepo"
-    shopt -s dotglob
-    rm -rf "$SCRIPT_DIR"/* "$SCRIPT_DIR"/.[!.]* "$SCRIPT_DIR"/..?* 2>/dev/null || true
-    cp -a "$tmpdir/newrepo/." "$SCRIPT_DIR/"
-    rm -rf "$tmpdir"
-    shopt -u dotglob
-  fi
-
-  echo "Code updated. Running Install..."
-  install_fn
-
-  echo "Update + Install complete."
-  brief_pause
-}
-
-# --- Menu loop ---
-while :; do
-  clear
-  echo "==========================================="
-  echo "  DBOT for \"$SESSION\"  (Linux: $ARCH_LABEL)"
-  echo "==========================================="
-  echo "[1] Start"
-  echo "[2] Start (headless)  - background, logs to \"$LOG\""
-  echo "[3] Stop (headless session only)"
-  echo "[4] Restart  (headless session only)"
-  echo "[5] Log (tail)  - opens separate window; close it to exit"
-  echo "[6] Shell (activate venv)"
-  echo "[7] Export requirements.txt"
-  echo "[8] Install / Reinstall venv + deps  (extract on demand, add 'dbot' cmd)"
-  echo "[9] Wipe  (delete venv + ${EMBED_DIR})"
-  echo "[0] Check for updates (wipe & pull if newer)"
-  echo "[Q] Quit"
-  echo
-  read -r -p "Select an option: " choice
-  
-  case "${choice,,}" in
-    0) update_check_fn ;;
-    1) if require_installed; then open_terminal_foreground; fi ;;
-    2) start_headless_fn || true ;;
-    3) stop_fn || true ;;
-    4) stop_fn || true; start_headless_fn || true ;;
-    5) if [[ ! -f "$LOG" ]]; then echo "No log yet: $LOG"; brief_pause; else open_terminal_tail; fi ;;
-    6) shell_fn ;;
-    7) export_req ;;
-    8) install_fn ;;
-    9) wipe_only ;;
-    q) break ;;
-    *) : ;;
-  esac
+    case "${choice,,}" in
+        1) action_start ;;
+        2) action_stop ;;
+        3) action_restart ;;
+        4) action_shell ;;
+        5) action_logs ;;
+        6) action_destroy_container ;;
+        q) exit 0 ;;
+    esac
 done

@@ -1,0 +1,36 @@
+services:
+  wggbot:
+    container_name: wggbot
+    image: ubuntu:22.04
+    working_dir: /app
+    volumes:
+      - ./:/app
+    command: >
+      bash -c "
+        echo '🔧 Restoring Ubuntu apt sources...' &&
+        echo 'deb http://archive.ubuntu.com/ubuntu jammy main universe' > /etc/apt/sources.list &&
+        echo 'deb http://archive.ubuntu.com/ubuntu jammy-updates main universe' >> /etc/apt/sources.list &&
+        echo 'deb http://archive.ubuntu.com/ubuntu jammy-security main universe' >> /etc/apt/sources.list &&
+
+        echo '📦 Updating apt...' &&
+        apt-get update -y &&
+
+        echo '📦 Installing certs + xz-utils...' &&
+        apt-get install -y ca-certificates xz-utils ffmpeg &&
+        update-ca-certificates &&
+
+        echo '🔥 Extracting portable python...' &&
+        mkdir -p /app/resources/python313/extracted &&
+        tar -xf /app/resources/python313/cpython-3.13.7linux.tar.xz -C /app/resources/python313 &&
+
+        echo '🐍 Creating venv using portable python...' &&
+        /app/resources/python313/python/bin/python3 -m venv /app/venv &&
+
+        echo '📦 Activating venv and installing requirements...' &&
+        source /app/venv/bin/activate &&
+        pip install -r requirements.txt &&
+
+        echo '🚀 Starting bot...' &&
+        exec /app/venv/bin/python /app/main.py
+      "
+    restart: unless-stopped
