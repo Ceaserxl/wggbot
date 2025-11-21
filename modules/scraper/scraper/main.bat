@@ -10,14 +10,14 @@ mode con: cols=140 lines=45
 :: ==========================================================
 ::  Virtual Environment Check
 :: ==========================================================
-if not exist "C:\venvs\tg\Scripts\activate.bat" (
+if not exist "..\..\..\wvenv\Scripts\activate.bat" (
     echo ❌ Virtual environment not found.
     echo Create one:
-    echo     python -m venv C:\venvs\tg
+    echo     python -m venv ..\..\..\wvenv\Scripts\activate.bat
     exit /b
 )
 
-call C:\venvs\tg\Scripts\activate.bat
+call ..\..\..\wvenv\Scripts\activate.bat
 cd /d "%~dp0"
 
 :MENU

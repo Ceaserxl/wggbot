@@ -1,66 +1,47 @@
-# modules/scraper/commands.py
-
 import discord
 from discord import app_commands
 
-from .scraper.main import main as run_scraper   # async main()
-
+# Import scraper internals
+from .scraper.main import (
+    load_global_defaults,
+    ensure_settings_file,
+    cache_db,
+    main as run_scraper,
+)
 
 def setup(bot):
 
     @bot.tree.command(
         name="scrape",
-        description="Run the TheFap scraper with space-separated tags."
+        description="Run the scraper with space-separated tags."
     )
-    @app_commands.describe(
-        tags="Space-separated tags, e.g. bhabie thick blonde"
-    )
-    async def scrape_cmd(
-        interaction: discord.Interaction,
-        tags: str
-    ):
-        """
-        Example:
-            /scrape tags:"bhabie thick blonde"
-        """
+    @app_commands.describe(tags="Example: bhabie thick blonde")
+    async def scrape_cmd(interaction: discord.Interaction, tags: str):
 
         await interaction.response.defer(thinking=True)
 
-        # Split by spaces
-        normalized_tags = [t.strip() for t in tags.split(" ") if t.strip()]
+        normalized = [t for t in tags.split(" ") if t]
 
-        if not normalized_tags:
-            await interaction.followup.send("❌ No valid tags provided.")
-            return
+        if not normalized:
+            return await interaction.followup.send("❌ No tags provided.")
 
-        status_msg = await interaction.followup.send(
-            f"🚀 **Scraper started**\n"
-            f"**Tags:** `{', '.join(normalized_tags)}`\n"
-            f"**Mode:** images+videos (default)\n\n"
-            "This may take a while…"
-        )
+        # Init environment
+        ensure_settings_file()
+        await cache_db.init_db()
+        load_global_defaults()
+
+        msg = await interaction.followup.send("⏳ Starting scraper…")
 
         try:
-            # Call scraper with correct parameters
             await run_scraper(
-                normalized_tags,   # tags list
-                [],                # galleries (unused)
-                "both",            # mode
-                False,             # reverse_flag
-                False,             # simulate_flag
-                False,             # images_videos_flag
-                True               # summary_flag
+                normalized,
+                [],
+                "both",
+                False,   # reverse
+                False,   # simulate
+                False,   # images_videos
+                True     # summary
             )
-
-            await status_msg.edit(
-                content=(
-                    f"✅ **Scrape complete!**\n"
-                    f"Tags: `{', '.join(normalized_tags)}`\n"
-                    "Downloads saved."
-                )
-            )
-
+            await msg.edit(content="✅ Done.")
         except Exception as e:
-            await status_msg.edit(
-                content=f"❌ **Scraper crashed:**\n```\n{str(e)}\n```"
-            )
+            await msg.edit(content=f"❌ Error:\n```\n{e}\n```")

@@ -1,8 +1,12 @@
 import os
 import time
 import aiosqlite
-
-DB_PATH = "cache/cache.db"
+from pathlib import Path
+# ------------------------------------------------------------
+#  Resolve DB path relative to THIS file, not CWD
+# ------------------------------------------------------------
+BASE_DIR = Path(__file__).resolve().parent        # modules/scraper/scraper/cache/
+DB_PATH = BASE_DIR / "../cache/cache.db"
 
 CREATE_TABLES = """
 -- 1) Tag → gallery mapping (many rows per tag)

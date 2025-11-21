@@ -9,7 +9,7 @@ from modules.ollama.ollama import handle_ollama_response
 # -------------------------------------------------------------------
 # Logging
 # -------------------------------------------------------------------
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.WARNING)
 
 
 # -------------------------------------------------------------------
@@ -71,7 +71,7 @@ def load_modules():
 async def on_ready():
     print(f"Logged in as {bot.user}")
     load_modules()
-    await bot.tree.sync()
+    await bot.tree.sync(guild=discord.Object(1240919439247933521))
     print("Slash commands synced.")
 
 

@@ -1,8 +1,25 @@
+# ------------------------------------------------------------
+#  Dual-mode import support (run as script OR module)
+# ------------------------------------------------------------
 import os
+import sys
+from pathlib import Path
+
+# If running directly (python main.py)
+if __package__ is None or __package__ == "":
+    # Force Python to treat this directory as a package root
+    THIS_FILE = Path(__file__).resolve()
+    SCRAPER_ROOT = THIS_FILE.parent          # modules/scraper/scraper/
+    PACKAGE_ROOT = SCRAPER_ROOT.parent       # modules/scraper/
+
+    sys.path.insert(0, str(PACKAGE_ROOT))
+
+    # Fix __package__ so relative imports work
+    __package__ = "scraper"
+
 import argparse
 import asyncio
 import signal
-import sys
 import requests
 import threading
 import shutil
@@ -27,21 +44,75 @@ from datetime import datetime, timedelta
 # ============================================================
 BASE_URL = "https://thefap.net/search/{}/"
 BASE_DOMAIN = "https://thefap.net"
+from pathlib import Path
+import os
 
-SETTINGS_PATH = "common/settings.ini"
+# Root of the scraper package (modules/scraper/scraper/)
+SCRAPER_ROOT = Path(__file__).resolve().parent
+SETTINGS_PATH = SCRAPER_ROOT / "settings.ini"
 
-CACHE_DIR = "cache/galleries"
+CACHE_DIR      = SCRAPER_ROOT / "cache"
+os.makedirs(CACHE_DIR, exist_ok=True)
 CACHE_DAYS = 70
-TAG_CACHE_DIR = "cache/tags"
 TAG_CACHE_DAYS = 70
 
 BANNER_WIDTH = 60
 
-download_path = "downloads"
-if os.name == "nt":        # Windows
-    download_path = "downloads_win"
+if os.name == "nt":
+    download_path = SCRAPER_ROOT / "downloads_win"
 else:
-    download_path = "downloads"
+    download_path = SCRAPER_ROOT / "downloads"
+# ============================================================
+#  GLOBAL DEFAULT VARIABLES (used when running as module)
+# ============================================================
+
+# numeric limits
+PROCESS_IMAGES = 10
+PROCESS_VIDEOS = 10
+PROCESS_GALLERIES = 1
+SCAN_TAGS = 25
+SCAN_GALLERIES = 25
+MIN_BOXES = 0
+
+# boolean defaults
+ini_reverse = False
+ini_simulate = False
+ini_imagesvideos = False
+ini_summary = True
+ini_videosonly = False
+ini_imagesonly = False
+ini_videosfirst = False
+
+
+def load_global_defaults():
+    """
+    Loads settings.ini and updates all global variables.
+    This must be called before running main() when the scraper
+    is imported (Discord bot).
+    """
+    global PROCESS_IMAGES, PROCESS_VIDEOS, PROCESS_GALLERIES
+    global SCAN_TAGS, SCAN_GALLERIES, MIN_BOXES
+    global ini_reverse, ini_simulate, ini_imagesvideos
+    global ini_summary, ini_videosonly, ini_imagesonly, ini_videosfirst
+
+    ensure_settings_file()
+    settings = load_settings()
+
+    PROCESS_IMAGES     = settings["PROCESS_IMAGES"]
+    PROCESS_VIDEOS     = settings["PROCESS_VIDEOS"]
+    PROCESS_GALLERIES  = settings["PROCESS_GALLERIES"]
+    SCAN_TAGS          = settings["SCAN_TAGS"]
+    SCAN_GALLERIES     = settings["SCAN_GALLERIES"]
+    MIN_BOXES          = settings["MIN_BOXES"]
+
+    ini_reverse       = settings["reverse"]
+    ini_simulate      = settings["simulate"]
+    ini_imagesvideos  = settings["images_videos"]
+    ini_summary       = settings["summary"]
+    ini_videosonly    = settings["videos_only"]
+    ini_imagesonly    = settings["images_only"]
+    ini_videosfirst   = settings["videos_first"]
+
 
 # ============================================================
 #  Settings Parser + Defaults
@@ -76,10 +147,8 @@ def ensure_settings_file():
         with open(SETTINGS_PATH, "w") as f:
             config.write(f)
 
-
 def to_bool(v):
     return str(v).lower() in ("1", "true", "yes", "on")
-
 
 def load_settings():
     config = configparser.ConfigParser()
@@ -186,16 +255,6 @@ def safe_print(*args, **kwargs):
         tqdm.write(output)
 
 # ============================================================
-#  Gallery Cache Helpers
-# ============================================================
-def ensure_cache_dir():
-    os.makedirs(CACHE_DIR, exist_ok=True)
-
-def cache_path(link: str) -> str:
-    h = hashlib.sha1(link.encode()).hexdigest()
-    return os.path.join(CACHE_DIR, f"{h}.json")
-
-# ============================================================
 #  Immediate Ctrl +C handler
 # ============================================================
 stop_event = asyncio.Event()
@@ -213,17 +272,6 @@ def _sigint_handler(signum, frame):
 
 signal.signal(signal.SIGINT, _sigint_handler)
 signal.signal(signal.SIGTERM, _sigint_handler)
-
-# ============================================================
-#  Tag Cache Helpers
-# ============================================================
-def ensure_tag_cache_dir():
-    os.makedirs(TAG_CACHE_DIR, exist_ok=True)
-
-def tag_cache_path(tag: str) -> str:
-    safe_tag = "".join(c for c in tag if c.isalnum() or c in "-_").lower()
-    return os.path.join(TAG_CACHE_DIR, f"{safe_tag}.json")
-
 # ============================================================
 #  Tag history
 # ============================================================
@@ -600,18 +648,17 @@ async def download_gallery_videos(link, tag, snippets, box_count, tag_total):
             except:
                 safe_print(f"❌ Video phase failed for {gallery_name}")
                 return 0
-
+            
 async def phase3_download(ordered_galleries, mode, images_videos_together=False):
     print_banner(f"Phase 3 — Downloading {len(ordered_galleries)} galleries", "🚀")
 
-    stats = {}  # tag → { gallery → [img_count, vid_count] }
+    stats = {}  # tag → gallery → [img_count, vid_count]
 
     queue = asyncio.Queue()
     for entry in ordered_galleries:
         queue.put_nowait(entry)
 
-    async def normalize(x):
-        """Ensure all download functions return int, even if None."""
+    def norm(x):
         return x if isinstance(x, int) else 0
 
     async def worker(pbar):
@@ -623,7 +670,7 @@ async def phase3_download(ordered_galleries, mode, images_videos_together=False)
 
             gallery_name = os.path.basename(urlparse(link).path.strip("/"))
 
-            # init stats bucket
+            # ensure nested dict exists
             stats.setdefault(tag, {})
             stats[tag].setdefault(gallery_name, [0, 0])
 
@@ -633,46 +680,49 @@ async def phase3_download(ordered_galleries, mode, images_videos_together=False)
 
                 # ----------------- IMAGES ONLY -----------------
                 if mode == "images":
-                    img_count = await normalize(
+                    img_count = norm(
                         await download_gallery_images(link, tag, snippets, box_count, tag_total)
                     )
 
                 # ----------------- VIDEOS ONLY -----------------
                 elif mode == "videos":
-                    vid_count = await normalize(
+                    vid_count = norm(
                         await download_gallery_videos(link, tag, snippets, box_count, tag_total)
                     )
 
                 # ----------------- VIDEOS FIRST -----------------
                 elif mode == "videos_first":
-                    vid_count = await normalize(
+                    vid_count = norm(
                         await download_gallery_videos(link, tag, snippets, box_count, tag_total)
                     )
-                    img_count = await normalize(
+                    img_count = norm(
                         await download_gallery_images(link, tag, snippets, box_count, tag_total)
                     )
 
                 # ----------------- BOTH -----------------
                 else:
                     if images_videos_together:
-                        # run both simultaneously
-                        img_count, vid_count = await asyncio.gather(
-                            normalize(await download_gallery_images(
-                                link, tag, snippets, box_count, tag_total
-                            )),
-                            normalize(await download_gallery_videos(
-                                link, tag, snippets, box_count, tag_total
-                            )),
+                        # Correct parallel execution
+                        img_task = download_gallery_images(
+                            link, tag, snippets, box_count, tag_total
                         )
+                        vid_task = download_gallery_videos(
+                            link, tag, snippets, box_count, tag_total
+                        )
+
+                        img_count, vid_count = await asyncio.gather(img_task, vid_task)
+                        img_count = norm(img_count)
+                        vid_count = norm(vid_count)
+
                     else:
-                        img_count = await normalize(
+                        img_count = norm(
                             await download_gallery_images(link, tag, snippets, box_count, tag_total)
                         )
-                        vid_count = await normalize(
+                        vid_count = norm(
                             await download_gallery_videos(link, tag, snippets, box_count, tag_total)
                         )
 
-                # save results
+                # save the tallies
                 stats[tag][gallery_name][0] += img_count
                 stats[tag][gallery_name][1] += vid_count
 
@@ -696,13 +746,13 @@ async def phase3_download(ordered_galleries, mode, images_videos_together=False)
             asyncio.create_task(worker(t))
             for _ in range(min(PROCESS_GALLERIES, max(1, len(ordered_galleries))))
         ]
+
         await queue.join()
 
         for w in workers:
             w.cancel()
 
     return stats
-
 
 # ============================================================
 #  Main pipeline
