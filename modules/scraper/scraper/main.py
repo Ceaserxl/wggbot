@@ -1,6 +1,7 @@
 # ============================================================
 #  FILE: scraper/main.py
-#  Clean launcher for the entire TheFap Scraper pipeline.
+#  Clean launcher for full TheFap Scraper pipeline.
+#  Pipeline: P1A → P1B → P2A → P2B → P3
 # ============================================================
 
 import os
@@ -9,12 +10,10 @@ import argparse
 import asyncio
 import shutil
 from pathlib import Path
-from urllib.parse import urlparse
-from datetime import datetime
 from tqdm import tqdm
 
 # ------------------------------------------------------------
-#  Dual-mode support (python main.py OR package import)
+#  Dual mode import support
 # ------------------------------------------------------------
 if __package__ is None or __package__ == "":
     THIS_FILE = Path(__file__).resolve()
@@ -24,129 +23,170 @@ if __package__ is None or __package__ == "":
     __package__ = "scraper"
 
 # ------------------------------------------------------------
+#  PRE-RUN: wipe all *_debug.txt logs
+# ------------------------------------------------------------
+project_root = Path(__file__).resolve().parent.parent
+
+def wipe_debug_logs():
+    for root, dirs, files in os.walk(project_root):
+        for f in files:
+            if f.endswith("_debug.txt"):
+                try:
+                    p = Path(root) / f
+                    print(f"🧹 Removing debug log: {p}")
+                    p.unlink(missing_ok=True)
+                except:
+                    pass
+
+wipe_debug_logs()
+
+# ------------------------------------------------------------
 #  Imports
 # ------------------------------------------------------------
 from .common.common import safe_print, print_banner, print_summary
-from .common.phase1.scan_tags import phase1_collect_urls
-from .common.phase1.scan_galleries import phase2_scan_galleries
+from .common.phase1.scan_tags import phase1A_collect_urls
+from .common.phase1.scan_galleries import phase1B_scan_galleries
+from .common.phase2.extract_images import extract_images_from_boxes
+from .common.phase2.extract_videos import extract_videos_from_boxes
 from .common.phase3.download import phase3_download
 
 import scraper.common.settings as settings
-from scraper.common.settings import (
-    load_global_defaults,
-)
+from scraper.common.settings import load_global_defaults
 from .common import cache_db
 
 
 # ============================================================
-#  MAIN PIPELINE
+#  MAIN PIPELINE — strict P1A → P1B → P2A → P2B → P3
 # ============================================================
 async def main(tags, galleries, reverse_flag, simulate_flag, summary_flag):
-    # Load settings.ini into global variables
     load_global_defaults()
 
-    # --------------------------------------------------------
-    #  Phase 1 — Collect gallery URLs
-    # --------------------------------------------------------
-    if tags:
-        tag_to_galleries, all_galleries = await phase1_collect_urls(tags)
-    else:
-        tag_to_galleries = {"manual": galleries}
-        all_galleries = set(galleries)
+    phase1_enabled = True
+    phase2_enabled = True
+    phase3_enabled = True
 
-    if not all_galleries:
-        safe_print("❌ No galleries found for provided tags.")
-        return
+    # -----------------------------
+    # PHASE 1A + 1B
+    # -----------------------------
+    if phase1_enabled:
 
-    # --------------------------------------------------------
-    #  Phase 2 — Scroll each gallery and get snippets
-    # --------------------------------------------------------
-    gallery_data = await phase2_scan_galleries(tag_to_galleries)
+        # -------------------------
+        #  Phase 1A — get gallery URLs
+        # -------------------------
+        if tags:
+            tag_to_galleries, all_galleries = await phase1A_collect_urls(tags)
+        else:
+            tag_to_galleries = {"manual": galleries}
+            all_galleries = set(galleries)
 
-    # Deduplicate by URL
-    unique = {}
-    for link, tag, snippets in gallery_data:
-        if link not in unique:
-            unique[link] = (link, tag, snippets)
+        if not all_galleries:
+            safe_print("❌ No galleries found.")
+            return
 
-    gallery_data = list(unique.values())
+        # -------------------------
+        #  Phase 1B — scroll galleries → snippets
+        # -------------------------
+        p1b_results = await phase1B_scan_galleries(tag_to_galleries)
 
-    # Filter by box count and sort
-    gallery_data = sorted(
-        [
-            (link, tag, snippets, len(snippets))
-            for link, tag, snippets in gallery_data
+        # Deduplicate by gallery URL
+        deduped = {}
+        for link, tag, snippets in p1b_results:
+            if link not in deduped:
+                deduped[link] = (link, tag, snippets)
+
+        # Clean + filter
+        galleries_clean = [
+            (link, tag, snippets)
+            for (link, tag, snippets) in deduped.values()
             if len(snippets) > settings.REQUIRED_MIN_BOXES
-        ],
-        key=lambda x: x[3],
-        reverse=reverse_flag,
-    )
-
-    # Totals per tag
-    tag_box_totals = {}
-    for _, tag, _, count in gallery_data:
-        tag_box_totals[tag] = tag_box_totals.get(tag, 0) + count
-
-    # Build ordered list for Phase 3
-    ordered = [
-        (link, tag, snippets, count, tag_box_totals[tag])
-        for (link, tag, snippets, count) in gallery_data
-    ]
-
-    # --------------------------------------------------------
-    #  Phase 2 Summary
-    # --------------------------------------------------------
-    print_summary(
-        f"Total galleries scanned: {len(unique)}",
-        f"Total boxes extracted: {sum(len(snippets) for _, _, snippets in unique.values())}",
-        f"Required min boxes: {settings.REQUIRED_MIN_BOXES}",
-        f"Accepted galleries: {len(gallery_data)}",
-        emoji="🌐",
-    )
-
-    # --------------------------------------------------------
-    #  Phase 3 — Download Images + Videos
-    # --------------------------------------------------------
-    if ordered and not simulate_flag:
-        stats = await phase3_download(ordered, settings.INTERWOVEN_MODE)
-    else:
-        print_banner("Simulation Mode — Downloads Skipped", "🧪")
-        stats = {}
-
-    # --------------------------------------------------------
-    #  Phase 4 — Cleanup temporary folders
-    # --------------------------------------------------------
-    print_banner("Phase 4/4 — Cleanup", "🧹")
-
-    for target in ["__pycache__", "userdata"]:
-        if not os.path.exists(target):
-            continue
-
-        folders = [
-            os.path.join(target, d)
-            for d in os.listdir(target)
-            if os.path.isdir(os.path.join(target, d))
         ]
 
-        with tqdm(total=len(folders), desc=f"🧹 {target}") as bar:
-            for folder in folders:
-                shutil.rmtree(folder, ignore_errors=True)
-                bar.update(1)
+    # -----------------------------
+    # PHASE 2A + 2B
+    # -----------------------------
+    if phase2_enabled:
 
-        shutil.rmtree(target, ignore_errors=True)
+        # -------------------------
+        #  Phase 2A — Extract image URLs
+        # -------------------------
+        print_banner("Phase 2A — Extracting Image URLs", "🖼️")
+        p2a_results = {}   # gallery → [imageURLs]
+
+        for link, tag, snippets in galleries_clean:
+            image_urls = await extract_images_from_boxes(snippets)
+            p2a_results[link] = image_urls
+
+        # -------------------------
+        #  Phase 2B — Extract video PAGE URLs
+        # -------------------------
+        print_banner("Phase 2B — Extracting Video Page URLs", "🎞️")
+        p2b_results = {}   # gallery → [videoPageURLs]
+
+        for link, tag, snippets in galleries_clean:
+            video_pages = await extract_videos_from_boxes(snippets)
+            p2b_results[link] = video_pages
+
+        # -------------------------
+        #  Build Phase 3 input list
+        # -------------------------
+        ordered = [
+            (link, tag, snippets)
+            for (link, tag, snippets) in galleries_clean
+        ]
+
+        print_summary(
+            f"Total galleries: {len(deduped)}",
+            f"Valid galleries: {len(galleries_clean)}",
+            f"Min boxes: {settings.REQUIRED_MIN_BOXES}",
+            emoji="🌐",
+        )
+
+    # -----------------------------
+    # PHASE 3 (disabled for now)
+    # -----------------------------
+    if phase3_enabled:
+        if ordered and not simulate_flag:
+            stats = await phase3_download(
+                ordered_galleries=ordered,
+                p2a_results=p2a_results,
+                p2b_results=p2b_results,
+                interwoven=settings.INTERWOVEN_MODE
+            )
+        else:
+            print_banner("Simulation Mode — Skipped", "🧪")
+            stats = {}
+
+    # -----------------------------
+    # PHASE 4 — CLEANUP
+    # -----------------------------
+    print_banner("Phase 4 — Cleanup", "🧹")
+
+    # Remove __pycache__ everywhere
+    pycaches = []
+    for root, dirs, files in os.walk(project_root):
+        for d in dirs:
+            if d == "__pycache__":
+                pycaches.append(os.path.join(root, d))
+
+    for folder in pycaches:
+        shutil.rmtree(folder, ignore_errors=True)
+
+    # Remove userdata
+    if os.path.exists("userdata"):
+        shutil.rmtree("userdata", ignore_errors=True)
 
     print_banner("Cleanup Complete", "✅")
 
-    # --------------------------------------------------------
-    #  Final Summary
-    # --------------------------------------------------------
-    if summary_flag and stats:
+    # -----------------------------
+    # Phase 3 Summary (only if enabled)
+    # -----------------------------
+    if phase3_enabled and summary_flag and stats:
         print_banner("Download Summary", "📦")
         for tag, gdata in stats.items():
-            total_images = sum(v[0] for v in gdata.values())
-            total_videos = sum(v[1] for v in gdata.values())
-            safe_print(f"📦 {tag:<32} | {total_images} images, {total_videos} videos")
-        safe_print("📦 " + "═" * 60 + " 📦")
+            imgs = sum(v[0] for v in gdata.values())
+            vids = sum(v[1] for v in gdata.values())
+            safe_print(f"📦 {tag:<20} | {imgs} images, {vids} videos")
+        safe_print("📦 " + "═" * 50 + " 📦")
 
 
 # ============================================================
@@ -156,18 +196,16 @@ if __name__ == "__main__":
     load_global_defaults()
     asyncio.run(cache_db.init_db())
 
-    # --------------- CLI ---------------
     parser = argparse.ArgumentParser(description="Ultimate TheFap Scraper")
 
     parser.add_argument("tags", nargs="*", help="Search tags")
-    parser.add_argument("-g", "--galleries", nargs="+", help="Specific gallery URLs")
-    parser.add_argument("--tags-file", help="Load tags from file (one per line)")
-    parser.add_argument("--galleries-file", help="Load gallery URLs from file")
-    parser.add_argument("--last", nargs="?", const="all", help="Load last N tags used")
+    parser.add_argument("-g", "--galleries", nargs="+")
+    parser.add_argument("--tags-file")
+    parser.add_argument("--galleries-file")
+    parser.add_argument("--last", nargs="?", const="all")
 
     args = parser.parse_args()
 
-    # Load tags
     tags = args.tags or []
     galleries = args.galleries or []
 
@@ -177,7 +215,7 @@ if __name__ == "__main__":
     if args.galleries_file:
         galleries.extend([g.strip() for g in open(args.galleries_file).read().splitlines()])
 
-    # Load from DB history
+    # history
     if args.last:
         if args.last == "all":
             tags = asyncio.run(cache_db.get_last(None))
@@ -190,7 +228,6 @@ if __name__ == "__main__":
         print("❌ Provide tags or galleries.")
         sys.exit(1)
 
-    # Start banner
     print_summary(
         "TheFap Gallery Downloader",
         f"Tags: {len(tags)}",
@@ -199,11 +236,5 @@ if __name__ == "__main__":
     )
 
     asyncio.run(
-        main(
-            tags=tags,
-            galleries=galleries,
-            reverse_flag=False,
-            simulate_flag=False,
-            summary_flag=True,
-        )
+        main(tags, galleries, reverse_flag=False, simulate_flag=False, summary_flag=True)
     )

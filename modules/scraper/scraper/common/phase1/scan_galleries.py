@@ -150,7 +150,7 @@ async def scrape_gallery_boxes(link, tag):
 # ============================================================
 #  Phase 1B — Scan all galleries for all tags
 # ============================================================
-async def phase2_scan_galleries(tag_to_galleries):
+async def phase1B_scan_galleries(tag_to_galleries):
     """
     Input:  { tag: [gallery URLs] }
     Output: list[(link, tag, [outerHTML])]
@@ -162,11 +162,11 @@ async def phase2_scan_galleries(tag_to_galleries):
     ]
 
     print_banner(
-        f"Phase 2 — Scanning {len(all_tasks)} Galleries",
+        f"Phase 1B — Scanning {len(all_tasks)} Galleries",
         "🌐"
     )
 
-    dlog(f"[phase2_scan_galleries] START total={len(all_tasks)}")
+    dlog(f"[phase1B_scan_galleries] START total={len(all_tasks)}")
 
     queue = asyncio.Queue()
     results = []
@@ -182,18 +182,18 @@ async def phase2_scan_galleries(tag_to_galleries):
             except asyncio.CancelledError:
                 return
 
-            dlog(f"[phase2_worker] START {link} tag={tag}")
+            dlog(f"[phase1B_worker] START {link} tag={tag}")
 
             try:
                 data = await scrape_gallery_boxes(link, tag)
                 if data[2]:  # has snippets
                     results.append(data)
-                    dlog(f"[phase2_worker] SAVED {link} with {len(data[2])} boxes")
+                    dlog(f"[phase1B_worker] SAVED {link} with {len(data[2])} boxes")
                 else:
-                    dlog(f"[phase2_worker] EMPTY {link}")
+                    dlog(f"[phase1B_worker] EMPTY {link}")
             except Exception as e:
                 safe_print(f"❌ failed gallery {link}: {e}")
-                dlog(f"[phase2_worker] ERROR {link}: {e}")
+                dlog(f"[phase1B_worker] ERROR {link}: {e}")
             finally:
                 pbar.update(1)
                 queue.task_done()
@@ -217,5 +217,5 @@ async def phase2_scan_galleries(tag_to_galleries):
         for w in workers:
             w.cancel()
 
-    dlog(f"[phase2_scan_galleries] END results={len(results)}\n")
+    dlog(f"[phase1B_scan_galleries] END results={len(results)}\n")
     return results

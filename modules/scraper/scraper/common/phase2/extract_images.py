@@ -1,66 +1,68 @@
+# ============================================================
+#  FILE: scraper/common/phase2/extract_images.py
+#  Phase 2A — Extract image URLs from HTML snippets
+# ============================================================
+
 import re
 from pathlib import Path
 from urllib.parse import urljoin
+from bs4 import BeautifulSoup
 from scraper.common.common import BASE_DOMAIN
 
 # ============================================================
-#  DEBUG TOGGLE
+#  DEBUG
 # ============================================================
-debug = True   # ← set False to disable debug output entirely
+debug = True
+PHASE2_DIR = Path(__file__).resolve().parent
+PHASE2_DEBUG_FILE = PHASE2_DIR / "phase2_debug.txt"
 
-# Path: scraper/common/phase2/phase2_debug.txt
-DEBUG_PATH = Path(__file__).resolve().parent / "phase2_debug.txt"
 
-
-def dlog(msg: str):
-    """Write debug messages only when debug=True."""
+def dlog(*args):
     if not debug:
         return
-    with open(DEBUG_PATH, "a", encoding="utf-8") as f:
-        f.write(msg + "\n")
+    try:
+        with open(PHASE2_DEBUG_FILE, "a", encoding="utf-8") as f:
+            f.write(" ".join(str(a) for a in args) + "\n")
+    except:
+        pass
 
 
 # ============================================================
-#  IMAGE EXTRACTION
+#  Phase 2A — Extract image URLs from HTML STRINGS
 # ============================================================
-IMAGE_EXT_PATTERN = r"\.(jpg|jpeg|png|gif|webp|avif)(?=[^a-zA-Z0-9]|$)"
-
-
-async def extract_images_from_boxes(boxes):
+async def extract_images_from_boxes(snippets):
+    """
+    Phase 2A receives HTML *strings* (from Phase 1B).
+    We no longer require extensions — download first, detect later.
+    """
     urls = set()
+    dlog("\n================ PHASE 2A: EXTRACT IMAGES ================\n")
 
-    dlog("\n================ EXTRACT IMAGES ================\n")
-
-    for box_i, box in enumerate(boxes, start=1):
-        imgs = await box.query_selector_all("img")
+    for box_i, html in enumerate(snippets, start=1):
+        soup = BeautifulSoup(html, "html.parser")
+        imgs = soup.find_all("img")
 
         if not imgs:
-            dlog(f"[box {box_i}] NO img tags found")
+            dlog(f"[box {box_i}] NO <img> tags found")
             continue
 
-        dlog(f"[box {box_i}] {len(imgs)} <img> tags found")
-
         for img_i, img in enumerate(imgs, start=1):
+            src = img.get("src")
+            ds  = img.get("data-src")
 
-            src = await img.get_attribute("src")
-            ds  = await img.get_attribute("data-src")
-
-            dlog(f"[box {box_i}][img {img_i}] src= {src}")
-            dlog(f"[box {box_i}][img {img_i}] data-src= {ds}")
-
-            # Use data-src if needed
-            if (not src) or ("blank.gif" in (src or "")):
+            # Prefer data-src if usable
+            if not src or "blank.gif" in (src or ""):
                 if ds:
-                    dlog(f"[box {box_i}][img {img_i}] using data-src")
                     src = ds
+                    dlog(f"[box {box_i}][img {img_i}] using data-src")
 
             if not src:
-                dlog(f"[box {box_i}][img {img_i}] SKIP (no src or data-src)")
+                dlog(f"[box {box_i}][img {img_i}] SKIP (no usable src)")
                 continue
 
             raw = src
 
-            # Skip junk UI items
+            # Skip junk UI assets
             junk_words = ["logo", "placeholder", "blank.gif", "icon-play.svg"]
             if any(j in raw.lower() for j in junk_words):
                 dlog(f"[box {box_i}][img {img_i}] SKIP (junk UI): {raw}")
@@ -71,20 +73,15 @@ async def extract_images_from_boxes(boxes):
 
             if normalized.startswith("//"):
                 normalized = "https:" + normalized
-                dlog(f"[box {box_i}][img {img_i}] normalized → {normalized}")
+                dlog(f"[box {box_i}][img {img_i}] protocol-relative → {normalized}")
 
             elif not normalized.startswith("http"):
                 normalized = urljoin(BASE_DOMAIN, normalized)
                 dlog(f"[box {box_i}][img {img_i}] relative → {normalized}")
 
-            # Require real extension
-            if not re.search(IMAGE_EXT_PATTERN, normalized, flags=re.IGNORECASE):
-                dlog(f"[box {box_i}][img {img_i}] SKIP (no valid ext): {normalized}")
-                continue
-
-            dlog(f"[box {box_i}][img {img_i}] ACCEPTED → {normalized}")
+            # No extension checks — allow everything
+            dlog(f"[box {box_i}][img {img_i}] ACCEPTED (no-ext OK) → {normalized}")
             urls.add(normalized)
 
     dlog(f"[extract_images] FINAL COUNT = {len(urls)}\n")
-
     return list(urls)

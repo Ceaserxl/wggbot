@@ -25,14 +25,14 @@ PHASE1_DEBUG_FILE = PHASE1_DIR / "phase1_debug.txt"
 
 
 def dlog(*args):
-    """Write to phase1_debug.txt if debug=True."""
+    """Write to phase1A_debug.txt if debug=True."""
     if not debug:
         return
     try:
         with open(PHASE1_DEBUG_FILE, "a", encoding="utf-8") as f:
             f.write(" ".join(str(a) for a in args) + "\n")
     except Exception as e:
-        print("Phase1 debug log error:", e)
+        print("Phase1A debug log error:", e)
 
 
 # Clear log on each run
@@ -98,12 +98,12 @@ async def get_links(session, tag: str):
 # ============================================================
 #  Phase 1A — Collect gallery URLs for all tags
 # ============================================================
-async def phase1_collect_urls(tags):
+async def phase1A_collect_urls(tags):
     from scraper.main import print_banner  # avoid circular imports
 
-    print_banner("Phase 1 — Collecting Tag URLs", "🔍")
+    print_banner("Phase 1A — Collecting Tag URLs", "🔍")
 
-    dlog(f"[phase1_collect_urls] START tags={tags}")
+    dlog(f"[phase1A_collect_urls] START tags={tags}")
 
     tag_to_galleries = {}
     all_galleries = set()
@@ -153,6 +153,6 @@ async def phase1_collect_urls(tags):
             for w in workers:
                 w.cancel()
 
-    dlog(f"[phase1_collect_urls] DONE. Unique galleries={len(all_galleries)}")
+    dlog(f"[phase1A_collect_urls] DONE. Unique galleries={len(all_galleries)}")
 
     return tag_to_galleries, list(all_galleries)
