@@ -28,60 +28,75 @@ def dlog(*args):
 
 
 # ============================================================
-#  Phase 2A — Extract image URLs from HTML STRINGS
+#  Phase 2A — Extract + DE-DUPLICATE image URLs
 # ============================================================
 async def extract_images_from_boxes(snippets):
     """
-    Phase 2A receives HTML *strings* (from Phase 1B).
-    We no longer require extensions — download first, detect later.
+    Input:
+        snippets = [(idx, outerHTML), ...]
+
+    Output:
+        [(idx, image_url), ...] — TRUE box index preserved
+        Deduplicated by BOTH (idx, url)
     """
-    urls = set()
+
     dlog("\n================ PHASE 2A: EXTRACT IMAGES ================\n")
 
-    for box_i, html in enumerate(snippets, start=1):
+    # We'll accumulate in a dict to dedupe:
+    # key = (box_idx, normalized_url)
+    dedup = {}
+
+    for (box_idx, html) in snippets:
         soup = BeautifulSoup(html, "html.parser")
         imgs = soup.find_all("img")
 
         if not imgs:
-            dlog(f"[box {box_i}] NO <img> tags found")
+            dlog(f"[box {box_idx}] NO <img> tags found")
             continue
 
         for img_i, img in enumerate(imgs, start=1):
             src = img.get("src")
-            ds  = img.get("data-src")
+            ds = img.get("data-src")
 
-            # Prefer data-src if usable
+            # Prefer data-src
             if not src or "blank.gif" in (src or ""):
                 if ds:
                     src = ds
-                    dlog(f"[box {box_i}][img {img_i}] using data-src")
+                    dlog(f"[box {box_idx}][img {img_i}] using data-src")
 
             if not src:
-                dlog(f"[box {box_i}][img {img_i}] SKIP (no usable src)")
+                dlog(f"[box {box_idx}][img {img_i}] SKIP (no usable src)")
                 continue
 
             raw = src
 
-            # Skip junk UI assets
+            # Skip junk UI elements
             junk_words = ["logo", "placeholder", "blank.gif", "icon-play.svg"]
             if any(j in raw.lower() for j in junk_words):
-                dlog(f"[box {box_i}][img {img_i}] SKIP (junk UI): {raw}")
+                dlog(f"[box {box_idx}][img {img_i}] SKIP (junk): {raw}")
                 continue
 
-            # Normalize minimal
+            # Normalize
             normalized = raw
 
             if normalized.startswith("//"):
                 normalized = "https:" + normalized
-                dlog(f"[box {box_i}][img {img_i}] protocol-relative → {normalized}")
+                dlog(f"[box {box_idx}][img {img_i}] protocol-relative → {normalized}")
 
             elif not normalized.startswith("http"):
                 normalized = urljoin(BASE_DOMAIN, normalized)
-                dlog(f"[box {box_i}][img {img_i}] relative → {normalized}")
+                dlog(f"[box {box_idx}][img {img_i}] relative → {normalized}")
 
-            # No extension checks — allow everything
-            dlog(f"[box {box_i}][img {img_i}] ACCEPTED (no-ext OK) → {normalized}")
-            urls.add(normalized)
+            dlog(f"[box {box_idx}][img {img_i}] ACCEPTED → {normalized}")
 
-    dlog(f"[extract_images] FINAL COUNT = {len(urls)}\n")
-    return list(urls)
+            # DEDUPE HERE
+            dedup[(box_idx, normalized)] = True
+
+    # Convert dedup dict back to list
+    results = [(idx, url) for (idx, url) in dedup.keys()]
+
+    # OPTIONAL: sort so results are stable
+    results.sort(key=lambda x: (x[0], x[1]))
+
+    dlog(f"[extract_images] FINAL UNIQUE COUNT = {len(results)}\n")
+    return results

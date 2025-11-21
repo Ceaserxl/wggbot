@@ -116,7 +116,7 @@ async def scrape_gallery_boxes(link, tag):
         snippets = []
         for i, b in enumerate(boxes, start=1):
             html = await b.evaluate("el => el.outerHTML")
-            snippets.append(html)
+            snippets.append((i, html))   # STORE REAL INDEX
             dlog(f"[scrape_gallery_boxes][box {i}] LEN={len(html)}")
 
         # Cleanup
@@ -161,10 +161,7 @@ async def phase1B_scan_galleries(tag_to_galleries):
         for link in glist
     ]
 
-    print_banner(
-        f"Phase 1B — Scanning {len(all_tasks)} Galleries",
-        "🌐"
-    )
+    """ print_banner(f"Phase 1B — Scanning {len(all_tasks)} Galleries", "🌐") """
 
     dlog(f"[phase1B_scan_galleries] START total={len(all_tasks)}")
 
@@ -199,9 +196,10 @@ async def phase1B_scan_galleries(tag_to_galleries):
                 queue.task_done()
 
     # run pool
+    gal_total = len(all_tasks)
     with tqdm(
         total=len(all_tasks),
-        desc="🌐 Scanning Galleries",
+        desc=f"🌐 Scanning {gal_total} Galleries",
         ncols=66,
         leave=True,
         bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} 🌐"

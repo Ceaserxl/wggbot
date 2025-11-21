@@ -33,12 +33,9 @@ def wipe_debug_logs():
             if f.endswith("_debug.txt"):
                 try:
                     p = Path(root) / f
-                    print(f"🧹 Removing debug log: {p}")
                     p.unlink(missing_ok=True)
                 except:
                     pass
-
-wipe_debug_logs()
 
 # ------------------------------------------------------------
 #  Imports
@@ -109,17 +106,15 @@ async def main(tags, galleries, reverse_flag, simulate_flag, summary_flag):
         # -------------------------
         #  Phase 2A — Extract image URLs
         # -------------------------
-        print_banner("Phase 2A — Extracting Image URLs", "🖼️")
+        print_banner("Phase 2 — Evaluating & Sorting...", "📦")
         p2a_results = {}   # gallery → [imageURLs]
 
         for link, tag, snippets in galleries_clean:
             image_urls = await extract_images_from_boxes(snippets)
             p2a_results[link] = image_urls
-
         # -------------------------
         #  Phase 2B — Extract video PAGE URLs
         # -------------------------
-        print_banner("Phase 2B — Extracting Video Page URLs", "🎞️")
         p2b_results = {}   # gallery → [videoPageURLs]
 
         for link, tag, snippets in galleries_clean:
@@ -133,11 +128,12 @@ async def main(tags, galleries, reverse_flag, simulate_flag, summary_flag):
             (link, tag, snippets)
             for (link, tag, snippets) in galleries_clean
         ]
-
+        # ✅ Sort galleries by snippet count (least → most)
+        ordered.sort(key=lambda x: len(x[2]))
+        
         print_summary(
-            f"Total galleries: {len(deduped)}",
-            f"Valid galleries: {len(galleries_clean)}",
             f"Min boxes: {settings.REQUIRED_MIN_BOXES}",
+            f"Accepted galleries: {len(galleries_clean)}",
             emoji="🌐",
         )
 
@@ -181,12 +177,12 @@ async def main(tags, galleries, reverse_flag, simulate_flag, summary_flag):
     # Phase 3 Summary (only if enabled)
     # -----------------------------
     if phase3_enabled and summary_flag and stats:
-        print_banner("Download Summary", "📦")
+        print_banner("Tag Download Summary", "📦")
         for tag, gdata in stats.items():
             imgs = sum(v[0] for v in gdata.values())
             vids = sum(v[1] for v in gdata.values())
-            safe_print(f"📦 {tag:<20} | {imgs} images, {vids} videos")
-        safe_print("📦 " + "═" * 50 + " 📦")
+            safe_print(f"📦 {tag:<37} | {imgs} images, {vids} videos 📦")
+        safe_print("📦 " + "═" * 60 + " 📦")
 
 
 # ============================================================
@@ -230,11 +226,11 @@ if __name__ == "__main__":
 
     print_summary(
         "TheFap Gallery Downloader",
-        f"Tags: {len(tags)}",
-        f"Galleries: {len(galleries)}",
+        f"Loaded Tags: {len(tags)}",
         emoji="🧭",
     )
-
+    print_banner("Phase 0 - Pre Cleaning...")
+    wipe_debug_logs()
     asyncio.run(
         main(tags, galleries, reverse_flag=False, simulate_flag=False, summary_flag=True)
     )

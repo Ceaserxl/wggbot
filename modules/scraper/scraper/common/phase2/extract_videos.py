@@ -1,7 +1,8 @@
 # ============================================================
 #  FILE: scraper/common/phase2/extract_videos.py
-#  Phase 2B — Extract video PAGE URLs (ASYNC VERSION)
+#  Phase 2B — Extract VIDEO PAGE URLs (ASYNC, INDEX-PRESERVING)
 # ============================================================
+
 import re
 from pathlib import Path
 from urllib.parse import urljoin
@@ -15,6 +16,7 @@ debug = True
 PHASE2_DIR = Path(__file__).resolve().parent
 PHASE2_DEBUG_FILE = PHASE2_DIR / "phase2_debug.txt"
 
+
 def dlog(*args):
     if not debug:
         return
@@ -24,48 +26,49 @@ def dlog(*args):
     except:
         pass
 
+
 # ============================================================
-#  ASYNC Phase 2B — Extract VIDEO PAGE URLs from HTML strings
+#  ASYNC Phase 2B — Extract + DE-DUPLICATE video PAGE URLs
 # ============================================================
-async def extract_videos_from_boxes(snippets: list[str]) -> list[str]:
+async def extract_videos_from_boxes(snippets):
     """
-    Async wrapper so Phase 2B can be awaited.
-    Parsing is synchronous, but async main pipeline expects await.
+    Input:
+        snippets = [(idx, outerHTML), ...]
+
+    Output:
+        [(idx, video_page_url), ...] — unique, index-preserving
     """
 
-    video_pages = set()
     dlog("\n================ PHASE 2B: EXTRACT VIDEOS ================\n")
 
-    for box_i, html in enumerate(snippets, start=1):
+    # Dedup container:
+    # key = (box_idx, normalized_url)
+    dedup = {}
+
+    for box_idx, html in snippets:
         soup = BeautifulSoup(html, "html.parser")
 
-        # --------------------------------------------------------
-        # Detect play icon inside <img> tags
-        # --------------------------------------------------------
+        # Detect play icon
         has_play = soup.find("img", src=lambda s: s and "icon-play.svg" in s)
-        dlog(f"[box {box_i}] has_play_icon = {bool(has_play)}")
+        dlog(f"[box {box_idx}] has_play_icon = {bool(has_play)}")
 
         if not has_play:
             continue
 
-        # --------------------------------------------------------
-        # Extract <a href="...">
-        # --------------------------------------------------------
+        # Extract <a href>
         a = soup.find("a", href=True)
         if not a:
-            dlog(f"[box {box_i}] SKIP — no <a> tag")
+            dlog(f"[box {box_idx}] SKIP — no <a> tag")
             continue
 
         href = a.get("href", "").strip()
-        dlog(f"[box {box_i}] href = {href}")
+        dlog(f"[box {box_idx}] raw href = {href}")
 
         if not href:
-            dlog(f"[box {box_i}] SKIP — blank href")
+            dlog(f"[box {box_idx}] SKIP — blank href")
             continue
 
-        # --------------------------------------------------------
-        # Normalize URL
-        # --------------------------------------------------------
+        # Normalize
         if href.startswith("//"):
             href = "https:" + href
         elif href.startswith("/"):
@@ -73,8 +76,14 @@ async def extract_videos_from_boxes(snippets: list[str]) -> list[str]:
         elif not href.startswith("http"):
             href = urljoin(BASE_DOMAIN, href)
 
-        dlog(f"[box {box_i}] ACCEPTED video page → {href}")
-        video_pages.add(href)
+        dlog(f"[box {box_idx}] ACCEPTED → {href}")
 
-    dlog(f"[extract_videos] FINAL COUNT = {len(video_pages)}\n")
-    return list(video_pages)
+        # DEDUPE HERE
+        dedup[(box_idx, href)] = True
+
+    # Convert dedupe dict → stable list
+    results = [(idx, href) for (idx, href) in dedup.keys()]
+    results.sort(key=lambda x: (x[0], x[1]))
+
+    dlog(f"[extract_videos] FINAL UNIQUE COUNT = {len(results)}\n")
+    return results

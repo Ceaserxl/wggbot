@@ -47,7 +47,6 @@ def detect_real_extension(path: str) -> str:
         return ".jpg"   # fallback
     return f".{kind.extension}"
 
-
 # ============================================================
 #  Main File Downloader
 # ============================================================
@@ -73,7 +72,7 @@ def download_file(
     # URL had no real filename → generate hashed name
     if not fname_raw or "." not in fname_raw:
         hashed = hashlib.md5(url.encode()).hexdigest()[:12]
-        fname_raw = hashed  # NO extension yet
+        fname_raw = hashed
 
     # TEMPORARY name
     if gallery_name and idx is not None:
@@ -83,9 +82,12 @@ def download_file(
 
     tmp_path = os.path.join(folder, fname_tmp)
 
-    # Avoid leftover tmp files
+    # Remove leftover tmp files
     if os.path.exists(tmp_path):
-        os.remove(tmp_path)
+        try:
+            os.remove(tmp_path)
+        except:
+            pass
 
     # ----------------------------------------------
     # Request headers
@@ -144,7 +146,18 @@ def download_file(
         while os.path.exists(final_path):
             final_path = f"{base}({next(counter)}){ext2}"
 
-    # Rename tmp → final
-    os.replace(tmp_path, final_path)
+    # ============================================================
+    #  Windows-safe safe rename (fixes WinError 32)
+    # ============================================================
+    for _ in range(20):  # 20 attempts (~200ms total)
+        try:
+            os.replace(tmp_path, final_path)
+            break
+        except PermissionError:
+            time.sleep(0.01)
+    else:
+        if debug:
+            tqdm.write(f"⚠️ PermissionError rename failed {tmp_path} → {final_path}")
+        return False
 
     return True

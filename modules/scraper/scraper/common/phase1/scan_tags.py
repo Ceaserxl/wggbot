@@ -101,7 +101,7 @@ async def get_links(session, tag: str):
 async def phase1A_collect_urls(tags):
     from scraper.main import print_banner  # avoid circular imports
 
-    print_banner("Phase 1A — Collecting Tag URLs", "🔍")
+    print_banner("Phase 1 — Collecting URLs", "🔍")
 
     dlog(f"[phase1A_collect_urls] START tags={tags}")
 
@@ -134,10 +134,10 @@ async def phase1A_collect_urls(tags):
                 finally:
                     pbar.update(1)
                     queue.task_done()
-
+        tags_total = len(tags)
         with tqdm(
-            total=len(tags),
-            desc="🔍 Tags",
+            total=tags_total,
+            desc=f"🔍 Scanning {tags_total} Tags",
             ncols=66,
             leave=True,
             bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} 🔍"
