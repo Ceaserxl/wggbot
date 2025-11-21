@@ -6,13 +6,6 @@ from discord.ext import commands
 from resources import keys
 from modules.ollama.ollama import handle_ollama_response
 
-
-# -------------------------------------------------------------------
-# Constants
-# -------------------------------------------------------------------
-OLLAMA_CHANNEL = keys.OLLAMA_CHANNEL
-
-
 # -------------------------------------------------------------------
 # Logging
 # -------------------------------------------------------------------
@@ -98,7 +91,7 @@ async def on_message(message):
     )
 
     # Ollama listening channel
-    if real_channel == OLLAMA_CHANNEL:
+    if real_channel == keys.OLLAMA_CHANNEL:
         bot.loop.create_task(handle_ollama_response(message))
         return
 

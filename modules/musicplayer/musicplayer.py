@@ -95,14 +95,28 @@ def extract_audio_url(info):
 
 
 def resolve_ffmpeg_executable():
-    """Locate usable ffmpeg binary."""
+    """Locate ffmpeg binary inside the module or system-wide."""
     if os.name == "nt":
+        # Try local bundled ffmpeg
+        local_path = Path(__file__).parent / "ffmpeg" / "ffmpeg.exe"
+        if local_path.exists():
+            return str(local_path)
+
+        # Try in same directory as python executable
         exe = Path(sys.executable).with_name("ffmpeg.exe")
-        if not exe.exists():
-            alt = Path(__file__).parent / "resources" / "ffmpeg" / "ffmpeg.exe"
-            exe = alt if alt.exists() else (shutil.which("ffmpeg.exe") or "ffmpeg.exe")
-        return str(exe)
+        if exe.exists():
+            return str(exe)
+
+        # Try system PATH
+        ff = shutil.which("ffmpeg.exe")
+        if ff:
+            return ff
+
+        # Fallback to plain name
+        return "ffmpeg.exe"
+
     else:
+        # Linux/macOS
         return shutil.which("ffmpeg") or "ffmpeg"
 
 
