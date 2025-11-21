@@ -1,0 +1,130 @@
+#!/bin/bash
+
+CONTAINER="scraper_env"
+USER="3000:3000"
+SCREEN_NAME="scraper"
+
+# ----------------------------------------
+# Helpers
+# ----------------------------------------
+ensure_container_running() {
+  STATUS=$(sudo docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null)
+  if [ "$STATUS" != "true" ]; then
+    echo "📦 Starting container..."
+    sudo docker start "$CONTAINER" >/dev/null
+    sleep 1
+  fi
+}
+
+screen_exists() {
+  sudo docker exec "$CONTAINER" bash -lc "screen -list | grep -q \"$SCREEN_NAME\"" 2>/dev/null
+}
+
+run_scraper() {
+  ensure_container_running
+
+  if screen_exists; then
+    echo "🧹 Killing old screen session..."
+    sudo docker exec "$CONTAINER" /usr/bin/screen -S "$SCREEN_NAME" -X quit
+  fi
+
+  echo "🚀 Launching scraper inside screen..."
+  sudo -E docker exec -it --user "$USER" "$CONTAINER" \
+    script -q -c "/usr/bin/screen -U -S $SCREEN_NAME -m python /app/main.py run $*" /dev/null
+}
+
+attach_screen() {
+  ensure_container_running
+  echo "🔍 Attaching (CTRL+A then D to detach)..."
+  sudo docker exec -it --user "$USER" "$CONTAINER" \
+    /usr/bin/screen -r -U "$SCREEN_NAME"
+}
+
+stop_screen() {
+  ensure_container_running
+  sudo docker exec "$CONTAINER" /usr/bin/screen -S "$SCREEN_NAME" -X quit || true
+  echo "✔ Screen session stopped."
+}
+
+stop_container() {
+  sudo docker stop "$CONTAINER"
+  echo "✔ Container stopped."
+}
+
+destroy_container() {
+  echo "⚠️ WARNING: This will DELETE the container permanently."
+  read -p "Type DELETE to confirm: " confirm
+  if [[ "$confirm" == "DELETE" ]]; then
+    sudo docker rm -f "$CONTAINER"
+    echo "💥 Container destroyed."
+  else
+    echo "❌ Cancelled."
+  fi
+}
+
+# ----------------------------------------
+# MENU LOOP
+# ----------------------------------------
+while true; do
+  clear
+  echo "========================================"
+  echo "           🌀 Scraper Control"
+  echo "========================================"
+  echo "1) Run Scraper (Enter Tags)"
+  echo "2) Run Scraper With Raw Arguments"
+  echo "3) Attach to Screen Session"
+  echo "4) Stop Screen Session"
+  echo "5) Stop Docker Container"
+  echo "6) Destroy Docker Container"
+  echo "7) Exit"
+  echo "----------------------------------------"
+  read -p "Select an option: " choice
+
+  case "$choice" in
+    1)
+      echo
+      read -p "Enter tags (example: nicoleponyxo thick -vf): " TAGS
+      echo
+      run_scraper $TAGS
+      read -p "Press ENTER to return to menu..."
+      ;;
+
+    2)
+      echo
+      read -p "Enter full arguments (example: run -g <url> -vf): " ARGS
+      echo
+      run_scraper $ARGS
+      read -p "Press ENTER to return to menu..."
+      ;;
+
+    3)
+      attach_screen
+      read -p "Press ENTER to return to menu..."
+      ;;
+
+    4)
+      stop_screen
+      read -p "Press ENTER to return to menu..."
+      ;;
+
+    5)
+      stop_container
+      read -p "Press ENTER to return to menu..."
+      ;;
+
+    6)
+      destroy_container
+      read -p "Press ENTER to return to menu..."
+      ;;
+
+    7)
+      echo "Goodbye!"
+      exit 0
+      ;;
+
+    *)
+      echo "❌ Invalid choice"
+      read -p "Press ENTER to continue..."
+      ;;
+  esac
+done

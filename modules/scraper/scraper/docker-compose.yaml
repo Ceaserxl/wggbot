@@ -1,0 +1,34 @@
+services:
+  scraper_env:
+    image: mcr.microsoft.com/playwright/python:v1.45.0-jammy
+    container_name: scraper_env
+    user: "root"
+    working_dir: /app
+    volumes:
+      - ./:/app
+    command: >
+      bash -c "
+        echo '📦 Updating apt...' &&
+        apt-get update -y &&
+        apt-get install -y screen sudo &&
+
+        echo '📦 Installing Python requirements...' &&
+        pip install -r /app/requirements.txt || true &&
+
+        echo '🌐 Installing Playwright chromium (with deps)...' &&
+        playwright install --with-deps chromium &&
+
+        echo '🛠 Fixing screen directories...' &&
+        mkdir -p /run/screen /var/run/screen &&
+        chmod 777 /run/screen /var/run/screen &&
+        chown -R 3000:3000 /run/screen /var/run/screen &&
+
+        echo '👤 Creating user voege (UID 3000)...' &&
+        groupadd -g 3000 voege || true &&
+        useradd -u 3000 -g 3000 -m voege || true &&
+        chown -R 3000:3000 /home/voege &&
+
+        echo '🔽 Switching to user 3000...' &&
+        exec su -s /bin/bash voege -c 'tail -f /dev/null'
+      "
+    restart: unless-stopped
