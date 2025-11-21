@@ -20,6 +20,8 @@ env/
 resources/python313/win-x64/
 resources/python313/linux-x64/
 resources/python313/rpi/
+resources/python313/python/
+resources/python313/extracted
 
 # Logs & caches
 *.log

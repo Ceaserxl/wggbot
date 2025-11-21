@@ -136,7 +136,7 @@ async def play_song(vc: discord.VoiceClient, url: str, mention, text_channel, ti
     ffmpeg_exe = resolve_ffmpeg_executable()
     ffmpeg_options = {
         "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-        "options": '-vn -af "volume=0.2"',
+        "options": '-vn -af "volume=0.07"',
     }
 
     vc.play(discord.FFmpegPCMAudio(executable=ffmpeg_exe, source=audio_url, **ffmpeg_options))
