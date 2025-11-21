@@ -1,34 +1,25 @@
+# ============================================================
+#  images.py — Phase 2 Image Extraction + Download Dispatcher
+#  Location: scraper/common/phase2/images.py
+# ============================================================
+
 import re
 import asyncio
-import random
-import threading
 from urllib.parse import urljoin
 from tqdm import tqdm
-from .common import BASE_DOMAIN, download_file
-from rich.console import Console
-from io import StringIO
+
+# -----------------------------
+# Correct project imports
+# -----------------------------
+from scraper.common.common import BASE_DOMAIN, safe_print
+from scraper.common.phase3.download_file import download_file
+
 
 # ============================================================
-#  Thread-safe printing
+#  Normalize WP / CDN image URLs
 # ============================================================
-console = Console(file=StringIO(), force_terminal=True, color_system="auto")
-print_lock = threading.Lock()
-def safe_print(*args, **kwargs):
-    """Thread-safe print that supports Rich markup but preserves tqdm formatting."""
-    with print_lock:
-        # Render Rich markup into a string
-        buf = StringIO()
-        temp_console = Console(file=buf, force_terminal=True, color_system="auto")
-        temp_console.print(*args, **kwargs)
-        output = buf.getvalue().rstrip("\n")
-        tqdm.write(output)
-
-# ============================================================
-#  Utility: Clean wp.com or scaled image URLs
-# ============================================================
-
 def clean_image_url(url: str) -> str:
-    """Normalize image URLs by removing :small?w=600 or /?w=600 suffixes."""
+    """Normalize image URLs by removing resizing / CDN suffixes."""
     if not url:
         return url
 
@@ -42,12 +33,11 @@ def clean_image_url(url: str) -> str:
 
 
 # ============================================================
-#  Image Extraction from Boxes
+#  Extract all usable image URLs from gallery boxes
 # ============================================================
-
 async def extract_images_from_boxes(boxes):
-    """Extract <img src> URLs directly from gallery boxes."""
     urls = set()
+
     for box in boxes:
         img = await box.query_selector("img")
         if not img:
@@ -59,16 +49,19 @@ async def extract_images_from_boxes(boxes):
 
         src = clean_image_url(src)
 
-        # Skip decorative / placeholder images
+        # Skip decorative / UI assets
         if any(skip in src.lower() for skip in ["logo", "blank.gif", "placeholder", "icon-play.svg"]):
             continue
 
-        # Fix relative or protocol-less URLs
+        # Fix protocol-relative (//domain.com/image.jpg)
         if src.startswith("//"):
             src = "https:" + src
+
+        # Fix site-relative (/wp-content/...jpg)
         elif not src.startswith("http"):
             src = urljoin(BASE_DOMAIN, src)
 
+        # Ensure valid image ending
         if re.search(r"\.(jpg|jpeg|png|gif|webp|avif)([/?#:].*|$)", src, re.IGNORECASE) or "wp.com/" in src:
             urls.add(src)
 
@@ -76,54 +69,64 @@ async def extract_images_from_boxes(boxes):
 
 
 # ============================================================
-#  Image Processing Logic
+#  Main image processing entry
 # ============================================================
 async def process_images(
     boxes,
     out_dir,
     gallery_name=None,
-    concurrency=1,
+    concurrency=4,
 ):
+    """
+    Extract image URLs → download them → return count.
+    """
     urls = await extract_images_from_boxes(boxes)
     if not urls:
         return 0
 
     total = len(urls)
-    semaphore = asyncio.Semaphore(concurrency)
+    sem = asyncio.Semaphore(concurrency)
 
     pbar = tqdm(
         total=total,
         desc=f"🖼️ {gallery_name}"[:20].ljust(20),
         ncols=66,
-        position=0,
         leave=False,
-        bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} 🖼️"
+        bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} 🖼️",
     )
 
+    # ------------------------------------------------------------
+    # Download single image
+    # ------------------------------------------------------------
     async def download_one(url, idx):
-        async with semaphore:
+        async with sem:
             try:
                 ok = await asyncio.to_thread(
                     download_file,
                     url,
                     out_dir,
-                    None,
-                    None,
-                    idx,
-                    gallery_name     # <-- IMPORTANT FIX
+                    None,        # referer
+                    None,        # force_ext
+                    idx,         # index-number
+                    gallery_name # prefix
                 )
                 pbar.update(1)
                 return ok
-            except Exception:
-                tqdm.write(f"❌ image-{idx} download error.")
+            except:
+                pbar.update(1)
                 return False
 
-    tasks = [download_one(url, i + 1) for i, url in enumerate(urls)]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    # ------------------------------------------------------------
+    # Dispatch downloads
+    # ------------------------------------------------------------
+    results = await asyncio.gather(
+        *(download_one(url, i + 1) for i, url in enumerate(urls)),
+        return_exceptions=True
+    )
 
     pbar.close()
-    success = sum(1 for r in results if r is True)
 
-    safe_print(f"🖼️ {gallery_name:<44}| {f'{success}/{total} images 🖼️':>17}")
+    success = sum(1 for r in results if r is True)
+    safe_print(f"🖼️ {gallery_name:<44}| {success}/{total} images")
 
     return success
