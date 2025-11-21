@@ -7,18 +7,16 @@ from tqdm import tqdm
 from .common import BASE_DOMAIN, decode_file_param, download_file, launch_chromium
 
 
-# ============================================================
-#  Video Extraction & Resolution Helpers
-# ============================================================
-
 VIDEO_EXT_PATTERN = r"\.(mp4|webm|mkv|mov|avi|flv|m4v|wmv|ts|mpeg|mpg)([/?#]|$)"
 
 
+# ============================================================
+#  VIDEO URL EXTRACTION
+# ============================================================
 async def extract_video_servers(page):
-    """Extract all potential playable video URLs from a video page."""
     servers = []
 
-    # Extract from Base64-encoded buttons
+    # Buttons with Base64-encoded data
     buttons = await page.query_selector_all("button.sv-change")
     for btn in buttons:
         val = await btn.get_attribute("value")
@@ -31,143 +29,195 @@ async def extract_video_servers(page):
                 real_url = decode_file_param(qs["file"][0])
                 if real_url:
                     servers.append(real_url)
-        except Exception:
+        except:
             continue
 
-    # Extract from raw HTML (direct video links)
+    # Raw HTML search
     html = await page.content()
     for m in re.findall(r"https?://[^\s\"']+" + VIDEO_EXT_PATTERN, html, re.IGNORECASE):
-        # m is a tuple due to the grouped regex; join only the first part
-        if isinstance(m, tuple):
-            servers.append(m[0])
-        else:
-            servers.append(m)
+        servers.append(m[0] if isinstance(m, tuple) else m)
 
     return servers
 
 
-async def resolve_dood_link(context, dood_url: str) -> str | None:
-    """Resolve dood/embed URLs into playable video links."""
-    resolved_url = None
+async def resolve_dood_link(context, url):
     try:
         page = await context.new_page()
         page.set_default_timeout(15000)
+
         try:
-            await page.goto(dood_url, timeout=15000)
-        except Exception:
+            await page.goto(url, timeout=15000)
+        except:
             await page.close()
             return None
 
-        resolved_url = (
-            await page.get_attribute("video", "src")
-            or await page.get_attribute("source", "src")
+        resolved = (
+            await page.get_attribute("video", "src") or
+            await page.get_attribute("source", "src")
         )
 
-        if not resolved_url:
+        if not resolved:
             html = await page.content()
             match = re.search(r"https?://[^\s\"']+" + VIDEO_EXT_PATTERN, html)
             if match:
-                resolved_url = match.group(0)
+                resolved = match.group(0)
 
         await page.close()
-    except Exception:
-        pass
-
-    return resolved_url
+        return resolved
+    except:
+        return None
 
 
 # ============================================================
-#  Download Management
+#  FILE DOWNLOAD TASK
 # ============================================================
-
 async def download_video_task(url, out_dir, gallery_name, idx):
-    """Download a single video file."""
+    """Download single video with correct naming."""
     try:
         ok = await asyncio.to_thread(
-            download_file, url, out_dir, None, None, idx, "video"
+            download_file,
+            url,
+            out_dir,
+            None,
+            None,
+            idx,
+            gallery_name       # IMPORTANT FIX
         )
-        await asyncio.sleep(0.05)
         return ok
-    except Exception:
+    except:
         return False
 
 # ============================================================
-#  Main Video Processing Logic
+#  MAIN VIDEO PROCESSOR
 # ============================================================
-async def process_videos(boxes, out_dir, gallery_name=None, concurrency=5, context=None):
-    """Extract video links from gallery boxes and download them concurrently."""
-    total_videos = len(boxes)
-    if total_videos == 0:
+async def process_videos(boxes, out_dir, gallery_name=None, concurrency=4, context=None):
+    """
+    Process only boxes containing a play button.
+    Index is based ONLY on real video boxes (1..N).
+    """
+
+    # ============================================================
+    #   1. Detect existing downloaded videos
+    # ============================================================
+    existing = set()
+    for f in os.listdir(out_dir):
+        if f.startswith(f"{gallery_name}-"):
+            idx_part = f.split("-")[-1].split(".")[0]
+            if idx_part.isdigit():
+                existing.add(int(idx_part))
+
+    # ============================================================
+    #   2. Filter boxes WITH play icon (correct video list)
+    # ============================================================
+    video_boxes = []
+    for b in boxes:
+        if await b.query_selector("img[src*='icon-play.svg']"):
+            video_boxes.append(b)
+
+    total = len(video_boxes)
+    if total == 0:
         return 0
 
-    success_count = 0
-    seen = set()
+    # ============================================================
+    #   3. Setup concurrency + tracking
+    # ============================================================
+    seen_urls = set()
     sem = asyncio.Semaphore(concurrency)
-    
+    success_count = 0
+
     pbar = tqdm(
-        total=total_videos,
+        total=total,
         desc=f"🎞️ {gallery_name}"[:20].ljust(20),
         ncols=66,
-        position=0,
         leave=False,
+        position=0,
         bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} 🎞️"
     )
 
-    async def handle_box(idx, box):
+    # ============================================================
+    #   4. Correct index = video_box index, not raw box index
+    # ============================================================
+    async def handle(video_index, box):
         nonlocal success_count
+
+        # Skip already-downloaded index
+        if video_index in existing:
+            pbar.update(1)
+            return True
+
         async with sem:
             try:
-                # Find the <a> that wraps the play icon
+                # a-tag containing play icon
                 a = await box.query_selector("a:has(img[src*='icon-play.svg'])")
                 if not a:
+                    pbar.update(1)
                     return False
 
                 href = await a.get_attribute("href")
                 if not href:
+                    pbar.update(1)
                     return False
 
-                vid_page_url = BASE_DOMAIN + href if href.startswith("/") else href
+                # Build page URL
+                video_page = BASE_DOMAIN + href if href.startswith("/") else href
 
-                # Use the shared context from main.py (per-gallery)
+                # Open video page
                 vpage = await context.new_page()
                 try:
-                    await vpage.goto(vid_page_url, timeout=30000)
+                    await vpage.goto(video_page, timeout=30000)
                     servers = await extract_video_servers(vpage)
                 finally:
                     await vpage.close()
 
                 if not servers:
+                    pbar.update(1)
                     return False
 
+                # ====================================================
+                #   Resolve servers until one downloads
+                # ====================================================
                 for server in servers:
-                    if server in seen:
+                    if server in seen_urls:
                         continue
-                    seen.add(server)
+                    seen_urls.add(server)
 
-                    ok = False
-                    # Direct playable link
+                    # direct link
                     if re.search(VIDEO_EXT_PATTERN, server, re.IGNORECASE):
-                        ok = await download_video_task(server, out_dir, gallery_name, idx)
-                    # Dood/embed style links
-                    elif any(x in server for x in ["dood.", "embed-", "bigwarp.io", "/embed/"]):
+                        ok = await download_video_task(
+                            server, out_dir, gallery_name, video_index
+                        )
+                        if ok:
+                            success_count += 1
+                            pbar.update(1)
+                            return True
+
+                    # dood / embed
+                    if any(x in server for x in ["dood.", "embed-", "bigwarp.io", "/embed/"]):
                         resolved = await resolve_dood_link(context, server)
                         if resolved and re.search(VIDEO_EXT_PATTERN, resolved, re.IGNORECASE):
-                            ok = await download_video_task(resolved, out_dir, gallery_name, idx)
+                            ok = await download_video_task(
+                                resolved, out_dir, gallery_name, video_index
+                            )
+                            if ok:
+                                success_count += 1
+                                pbar.update(1)
+                                return True
 
-                    if ok:
-                        success_count += 1
-                        pbar.update(1)
-                        return True
-
-            except Exception:
+            except:
+                pbar.update(1)
                 return False
 
-            return False  # nothing succeeded
+            # nothing worked
+            pbar.update(1)
+            return False
 
-    results = await asyncio.gather(*(handle_box(i, b) for i, b in enumerate(boxes, start=1)))
+    # ============================================================
+    #   5. Launch downloads — index is based on filtered list
+    # ============================================================
+    await asyncio.gather(
+        *(handle(i, box) for i, box in enumerate(video_boxes, start=1))
+    )
+
     pbar.close()
-
-    success = sum(1 for r in results if r)
-    tqdm.write(f"🎞️ {gallery_name:<46}| {f'{success}/{total_videos} videos 🎞️':>15}")
-    return success
-
+    tqdm.write(f"🎞️ {gallery_name:<46}| {success_count}/{total} videos 🎞️")
+    return success_count

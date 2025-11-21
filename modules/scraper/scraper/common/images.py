@@ -96,7 +96,7 @@ async def process_images(
         desc=f"🖼️ {gallery_name}"[:20].ljust(20),
         ncols=66,
         position=0,
-        leave=False,  # 👈 hide bar after completion
+        leave=False,
         bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} 🖼️"
     )
 
@@ -104,7 +104,13 @@ async def process_images(
         async with semaphore:
             try:
                 ok = await asyncio.to_thread(
-                    download_file, url, out_dir, None, None, idx, "image"
+                    download_file,
+                    url,
+                    out_dir,
+                    None,
+                    None,
+                    idx,
+                    gallery_name     # <-- IMPORTANT FIX
                 )
                 pbar.update(1)
                 return ok
@@ -118,8 +124,6 @@ async def process_images(
     pbar.close()
     success = sum(1 for r in results if r is True)
 
-    # ✅ Print short summary after completion
     safe_print(f"🖼️ {gallery_name:<44}| {f'{success}/{total} images 🖼️':>17}")
-
 
     return success

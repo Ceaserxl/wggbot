@@ -62,9 +62,8 @@ if "%tags%"=="" (
 echo.
 echo 🚀 Running scraper...
 python main.py run %tags%
-
-pause
-goto MENU
+if errorlevel 1 exit /b
+exit /b
 
 
 :: ==========================================================
