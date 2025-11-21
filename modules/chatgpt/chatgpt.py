@@ -1,4 +1,4 @@
-# resources/chatgpt_interaction.py
+# modules/chatgpt/chatgpt.py
 
 # ── Imports ─────────────────────────────────────────────────────────────
 import os

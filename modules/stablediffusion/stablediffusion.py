@@ -1,3 +1,4 @@
+# resources/stablediffusion.py
 # ── Imports ─────────────────────────────────────────────────────────────
 import os, io, time, base64, json, asyncio, requests, aiohttp
 from datetime import datetime

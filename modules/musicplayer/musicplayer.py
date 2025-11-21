@@ -1,4 +1,4 @@
-# resources/music_handling.py
+# resources/musicplayer.py
 
 # ── Imports ─────────────────────────────────────────────────────────────
 import asyncio
