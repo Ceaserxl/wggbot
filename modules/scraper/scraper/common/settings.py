@@ -20,13 +20,6 @@ if os.name == "nt":
 else:
     download_path = SCRAPER_ROOT / "downloads"
 
-download_path.mkdir(exist_ok=True)
-
-# Cache directory (JSON shard system or DB can sit here)
-CACHE_DIR = SCRAPER_ROOT / "cache"
-CACHE_DIR.mkdir(exist_ok=True)
-
-
 # ============================================================
 #  DEFAULT INI CONTENT (Matches YOUR EXACT format)
 # ============================================================

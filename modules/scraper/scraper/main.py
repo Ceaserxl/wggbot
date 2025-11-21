@@ -31,11 +31,9 @@ from .common.phase1.scan_tags import phase1_collect_urls
 from .common.phase1.scan_galleries import phase2_scan_galleries
 from .common.phase3.download import phase3_download
 
-from .common.settings import (
+import scraper.common.settings as settings
+from scraper.common.settings import (
     load_global_defaults,
-    download_path,
-    REQUIRED_MIN_BOXES,
-    INTERWOVEN_MODE,
 )
 from .common import cache_db
 
@@ -78,7 +76,7 @@ async def main(tags, galleries, reverse_flag, simulate_flag, summary_flag):
         [
             (link, tag, snippets, len(snippets))
             for link, tag, snippets in gallery_data
-            if len(snippets) > REQUIRED_MIN_BOXES
+            if len(snippets) > settings.REQUIRED_MIN_BOXES
         ],
         key=lambda x: x[3],
         reverse=reverse_flag,
@@ -101,7 +99,7 @@ async def main(tags, galleries, reverse_flag, simulate_flag, summary_flag):
     print_summary(
         f"Total galleries scanned: {len(unique)}",
         f"Total boxes extracted: {sum(len(snippets) for _, _, snippets in unique.values())}",
-        f"Required min boxes: {REQUIRED_MIN_BOXES}",
+        f"Required min boxes: {settings.REQUIRED_MIN_BOXES}",
         f"Accepted galleries: {len(gallery_data)}",
         emoji="🌐",
     )
@@ -110,7 +108,7 @@ async def main(tags, galleries, reverse_flag, simulate_flag, summary_flag):
     #  Phase 3 — Download Images + Videos
     # --------------------------------------------------------
     if ordered and not simulate_flag:
-        stats = await phase3_download(ordered, INTERWOVEN_MODE)
+        stats = await phase3_download(ordered, settings.INTERWOVEN_MODE)
     else:
         print_banner("Simulation Mode — Downloads Skipped", "🧪")
         stats = {}

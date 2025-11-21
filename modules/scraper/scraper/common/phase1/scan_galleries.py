@@ -1,33 +1,56 @@
 # ============================================================
-#  scan_galleries.py — Phase 2 (Scroll + Extract Gallery Boxes)
-#  Location: scraper/common/phase1/scan_galleries.py
+#  FILE: scraper/common/phase1/scan_galleries.py
+#  Phase 1B — Scroll & Capture gallery boxes (outerHTML cache)
 # ============================================================
 
 import asyncio
 import os
 from urllib.parse import urlparse
 from tqdm import tqdm
+from pathlib import Path
 
-# -----------------------------
-# Correct project imports
-# -----------------------------
 from scraper.common import cache_db
 from scraper.common.common import (
-    BASE_DOMAIN,
     safe_print,
     print_banner,
     launch_chromium,
+    stop_event
 )
-from scraper.common.settings import (
-    CACHE_DAYS,
-    SCAN_GALLERIES_CONC,
-)
+import scraper.common.settings as settings
 
 
 # ============================================================
-#  Scroll gallery until all content is loaded
+#  DEBUG SYSTEM — phase1_debug.txt (same file as scan_tags.py)
+# ============================================================
+debug = True
+
+PHASE1_DIR = Path(__file__).resolve().parent
+PHASE1_DEBUG_FILE = PHASE1_DIR / "phase1_debug.txt"
+
+
+def dlog(*args):
+    """Write text into phase1_debug.txt if debug=True."""
+    if not debug:
+        return
+    try:
+        with open(PHASE1_DEBUG_FILE, "a", encoding="utf-8") as f:
+            f.write(" ".join(str(a) for a in args) + "\n")
+    except Exception as e:
+        print("Phase1 debug log ERROR:", e)
+
+
+# ============================================================
+#  Scroll gallery until no more dynamic boxes appear
 # ============================================================
 async def scroll_gallery(context, url, delay=1000):
+    """
+    Scrolls until dynamic content stops loading.
+
+    Returns:
+        page, boxes[]
+    """
+    dlog(f"[scroll_gallery] OPEN {url}")
+
     page = await context.new_page()
     await page.goto(url, timeout=180000)
 
@@ -35,82 +58,123 @@ async def scroll_gallery(context, url, delay=1000):
     same_rounds = 0
 
     while True:
-        # Scroll to bottom
         await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
         await page.wait_for_timeout(delay)
 
         boxes = await page.query_selector_all("#content > div")
         count = len(boxes)
 
-        # Stop after two rounds with no new results
+        dlog(f"[scroll_gallery] box_count={count} last={last_count} same_rounds={same_rounds}")
+
+        # no new boxes → stable twice → done
         if count == last_count:
             same_rounds += 1
             if same_rounds >= 2:
+                dlog("[scroll_gallery] DONE (no new boxes)")
                 break
         else:
             same_rounds = 0
             last_count = count
 
+        if stop_event.is_set():
+            dlog("[scroll_gallery] CANCELLED (stop_event)")
+            raise asyncio.CancelledError
+
     return page, boxes
 
 
 # ============================================================
-#  Scrape a single gallery → return list of snippet HTML
+#  Scrape gallery → return raw outerHTML boxes
 # ============================================================
 async def scrape_gallery_boxes(link, tag):
-    # Try load from cache
-    cached = await cache_db.load_gallery(link, CACHE_DAYS)
+    """
+    Returns: (link, tag, [outerHTML boxes])
+    """
+
+    dlog(f"\n=== scrape_gallery_boxes START {link} tag={tag} ===")
+
+    # ----- Try cache first -----
+    cached = await cache_db.load_gallery(link, settings.DAYS_CACHE_VALID)
     if cached is not None:
+        dlog(f"[scrape_gallery_boxes] USING CACHE {link} ({len(cached)} boxes)")
         return (link, tag, cached)
 
     gallery_name = os.path.basename(urlparse(link).path.strip("/"))
 
     try:
-        # Launch Chromium
-        p, context = await launch_chromium(f"userdata/gallery_{gallery_name}", headless=True)
+        dlog(f"[scrape_gallery_boxes] launch browser for {gallery_name}")
+
+        p, context = await launch_chromium(
+            f"userdata/userdata_{gallery_name}",
+            headless=True
+        )
 
         page, boxes = await scroll_gallery(context, link)
+        dlog(f"[scrape_gallery_boxes] {gallery_name} loaded {len(boxes)} boxes")
 
-        # Extract HTML snippet for each box
-        snippets = [await b.evaluate("el => el.outerHTML") for b in boxes]
+        # Extract raw HTML
+        snippets = []
+        for i, b in enumerate(boxes, start=1):
+            html = await b.evaluate("el => el.outerHTML")
+            snippets.append(html)
+            dlog(f"[scrape_gallery_boxes][box {i}] LEN={len(html)}")
 
+        # Cleanup
         await page.close()
         await context.close()
         await p.stop()
 
-        # Save cache
+        # Save to cache
         if snippets:
-            await cache_db.save_gallery(link, tag, snippets, CACHE_DAYS)
+            dlog(f"[scrape_gallery_boxes] SAVE {len(snippets)} boxes for {gallery_name}")
+            await cache_db.save_gallery(
+                link,
+                tag,
+                snippets,
+                settings.DAYS_CACHE_VALID
+            )
 
+        dlog(f"=== scrape_gallery_boxes END {link} ===\n")
         return (link, tag, snippets)
 
     except asyncio.CancelledError:
+        dlog(f"[scrape_gallery_boxes] CANCELLED {link}")
         raise
 
     except Exception as e:
-        safe_print(f"❌ Failed to scrape gallery {gallery_name}: {e}")
+        safe_print(f"❌ Failed to scrape {gallery_name}: {e}")
+        dlog(f"[scrape_gallery_boxes] ERROR {gallery_name}: {e}")
         return (link, tag, [])
 
 
 # ============================================================
-#  Phase 2 — Scan ALL galleries discovered in Phase 1
+#  Phase 1B — Scan all galleries for all tags
 # ============================================================
 async def phase2_scan_galleries(tag_to_galleries):
-    # Flatten work list
+    """
+    Input:  { tag: [gallery URLs] }
+    Output: list[(link, tag, [outerHTML])]
+    """
     all_tasks = [
         (link, tag)
         for tag, glist in tag_to_galleries.items()
         for link in glist
     ]
 
-    print_banner(f"Phase 2 — Scanning {len(all_tasks)} Galleries", "🌐")
+    print_banner(
+        f"Phase 2 — Scanning {len(all_tasks)} Galleries",
+        "🌐"
+    )
+
+    dlog(f"[phase2_scan_galleries] START total={len(all_tasks)}")
 
     queue = asyncio.Queue()
-    for item in all_tasks:
-        queue.put_nowait(item)
-
     results = []
 
+    for link, tag in all_tasks:
+        queue.put_nowait((link, tag))
+
+    # worker
     async def worker(pbar):
         while True:
             try:
@@ -118,17 +182,23 @@ async def phase2_scan_galleries(tag_to_galleries):
             except asyncio.CancelledError:
                 return
 
+            dlog(f"[phase2_worker] START {link} tag={tag}")
+
             try:
                 data = await scrape_gallery_boxes(link, tag)
-                if data[2]:  # Has snippets
+                if data[2]:  # has snippets
                     results.append(data)
+                    dlog(f"[phase2_worker] SAVED {link} with {len(data[2])} boxes")
+                else:
+                    dlog(f"[phase2_worker] EMPTY {link}")
             except Exception as e:
-                safe_print(f"❌ Gallery failed {link}: {e}")
+                safe_print(f"❌ failed gallery {link}: {e}")
+                dlog(f"[phase2_worker] ERROR {link}: {e}")
             finally:
                 pbar.update(1)
                 queue.task_done()
 
-    # Progress bar
+    # run pool
     with tqdm(
         total=len(all_tasks),
         desc="🌐 Scanning Galleries",
@@ -139,7 +209,7 @@ async def phase2_scan_galleries(tag_to_galleries):
 
         workers = [
             asyncio.create_task(worker(pbar))
-            for _ in range(min(SCAN_GALLERIES_CONC, max(1, len(all_tasks))))
+            for _ in range(min(settings.SCAN_GALLS_CONC, max(1, len(all_tasks))))
         ]
 
         await queue.join()
@@ -147,4 +217,5 @@ async def phase2_scan_galleries(tag_to_galleries):
         for w in workers:
             w.cancel()
 
+    dlog(f"[phase2_scan_galleries] END results={len(results)}\n")
     return results
