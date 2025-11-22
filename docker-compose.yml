@@ -26,10 +26,11 @@ services:
         echo '🐍 Creating venv using portable python...' &&
         /app/resources/python313/python/bin/python3 -m venv /app/venv &&
 
-        echo '📦 Activating venv and installing requirements...' &&
+        echo '📦 Activating venv and installing playwright & requirements...' &&
         source /app/venv/bin/activate &&
         pip install -r requirements.txt &&
-
+        install playwright &&
+        
         echo '🚀 Starting bot...' &&
         exec /app/venv/bin/python /app/main.py
       "
