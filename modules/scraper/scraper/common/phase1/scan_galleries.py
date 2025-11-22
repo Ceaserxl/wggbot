@@ -22,7 +22,7 @@ import scraper.common.settings as settings
 # ============================================================
 #  DEBUG SYSTEM — phase1_debug.txt (same file as scan_tags.py)
 # ============================================================
-debug = True
+debug = False
 
 PHASE1_DIR = Path(__file__).resolve().parent
 PHASE1_DEBUG_FILE = PHASE1_DIR / "phase1_debug.txt"

@@ -12,7 +12,7 @@ from scraper.common.common import BASE_DOMAIN
 # ============================================================
 #  DEBUG
 # ============================================================
-debug = True
+debug = False
 PHASE2_DIR = Path(__file__).resolve().parent
 PHASE2_DEBUG_FILE = PHASE2_DIR / "phase2_debug.txt"
 

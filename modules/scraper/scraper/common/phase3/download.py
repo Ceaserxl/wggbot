@@ -10,14 +10,16 @@ from tqdm import tqdm
 from scraper.common.common import print_banner, launch_chromium, safe_print
 import scraper.common.settings as settings
 
-from scraper.common.phase3.download_file import download_file
-from scraper.common.phase3.video_resolver import resolve_video_page
+from .download_file import download_file
+from .video_resolver import resolve_video_page
+
+from ..bundle_helpers import BUNDLE, bundle_has_file
 
 
 # ============================================================
 #  DEBUG
 # ============================================================
-debug = True
+debug = False
 PHASE3_DIR = Path(__file__).resolve().parent
 PHASE3_DEBUG_FILE = PHASE3_DIR / "phase3_debug.txt"
 
@@ -31,18 +33,33 @@ def dlog(*args):
     except:
         pass
 
+import re
+
+def sanitize_gallery_name(name: str) -> str:
+    # Windows forbidden: < > : " / \ | ? *
+    return re.sub(r'[<>:"/\\|?*]', '_', name)
 
 # ============================================================
-#  Prevent re-download (ANY extension)
+#  FILE HELPERS
 # ============================================================
-def index_file_exists(folder: str, gallery_name: str, idx: int) -> bool:
+def find_index_file(folder: str, gallery_name: str, idx: int) -> Path | None:
+    """
+    Find a file in folder that matches gallery_name-idx with any extension.
+    Returns Path or None.
+    """
     prefix = f"{gallery_name}-{idx}"
     if not os.path.isdir(folder):
-        return False
+        return None
+
     for fname in os.listdir(folder):
         if fname.startswith(prefix):
-            return True
-    return False
+            return Path(folder) / fname
+    return None
+
+
+def index_file_exists(folder: str, gallery_name: str, idx: int) -> bool:
+    return find_index_file(folder, gallery_name, idx) is not None
+
 
 # ============================================================
 #  MASTER PHASE 3 — TRUE GALLERY CONCURRENCY
@@ -90,18 +107,20 @@ async def phase3_download(
 
     async def process_gallery_images(link, tag, snippets):
         async with sem_gallery:
-            gallery_name = os.path.basename(urlparse(link).path.strip("/"))
+            raw_name = os.path.basename(urlparse(link).path.strip("/"))
+            gallery_name = sanitize_gallery_name(raw_name)
             ensure(tag, gallery_name)
             dlog(f"[IMG GALLERY] {gallery_name} ({tag})")
 
             root = settings.download_path
             img_dir = os.path.join(root, tag, gallery_name, "images")
+            img_dir_path = Path(img_dir)
+            img_dir_path.mkdir(parents=True, exist_ok=True)
 
             image_items = p2a_results.get(link, [])  # [(box_idx, url)]
             total_imgs = len(image_items)
             img_count = 0
 
-            # Per-gallery tqdm
             gallery_pbar = tqdm(
                 total=total_imgs,
                 desc=f"🖼️ {gallery_name}"[:20].ljust(20),
@@ -116,20 +135,48 @@ async def phase3_download(
             async def img_worker(box_idx: int, url: str):
                 nonlocal img_count
 
-                # Already have any extension for this index?
-                if index_file_exists(img_dir, gallery_name, box_idx):
+                prefix = f"{gallery_name}-{box_idx}"
+
+                # 1) Check disk
+                disk_file = find_index_file(img_dir, gallery_name, box_idx)
+                if disk_file is not None:
+                    if not bundle_has_file(gallery_name, prefix):
+                        BUNDLE.add_file(
+                            gallery_name,
+                            f"images/{disk_file.name}",
+                            disk_file.read_bytes()
+                        )
                     img_count += 1
                     gallery_pbar.update(1)
                     return
 
+                # 2) Check bundle
+                bundle_file = bundle_has_file(gallery_name, prefix)
+                if bundle_file:
+                    data = BUNDLE.read_file(gallery_name, bundle_file)
+                    out_name = Path(bundle_file).name
+                    out_path = img_dir_path / out_name
+                    img_dir_path.mkdir(parents=True, exist_ok=True)
+                    out_path.write_bytes(data)
+
+                    img_count += 1
+                    gallery_pbar.update(1)
+                    return
+
+                # 3) Download and commit
                 async with sem_img:
                     ok = await asyncio.to_thread(
                         download_file, url, img_dir, None, None, box_idx, gallery_name
                     )
 
-                # Tmp race tolerance: if tmp vanished and ok==False, just move on
-                tmp_path = os.path.join(img_dir, f"{gallery_name}-{box_idx}.tmp")
-                if ok or os.path.exists(tmp_path):
+                disk_file = find_index_file(img_dir, gallery_name, box_idx)
+                if (ok or disk_file is not None) and disk_file is not None:
+                    if not bundle_has_file(gallery_name, prefix):
+                        BUNDLE.add_file(
+                            gallery_name,
+                            f"images/{disk_file.name}",
+                            disk_file.read_bytes()
+                        )
                     img_count += 1
 
                 gallery_pbar.update(1)
@@ -155,7 +202,6 @@ async def phase3_download(
     )
     phase_bar_imgs.close()
 
-
     # ------------------------------------------------------------
     #  PHASE 3B — VIDEOS
     # ------------------------------------------------------------
@@ -172,12 +218,15 @@ async def phase3_download(
 
     async def process_gallery_videos(link, tag, snippets):
         async with sem_gallery:
-            gallery_name = os.path.basename(urlparse(link).path.strip("/"))
+            raw_name = os.path.basename(urlparse(link).path.strip("/"))
+            gallery_name = sanitize_gallery_name(raw_name)
             ensure(tag, gallery_name)
             dlog(f"[VID GALLERY] {gallery_name} ({tag})")
 
             root = settings.download_path
             vid_dir = os.path.join(root, tag, gallery_name, "videos")
+            vid_dir_path = Path(vid_dir)
+            vid_dir_path.mkdir(parents=True, exist_ok=True)
 
             video_items = p2b_results.get(link, [])  # [(box_idx, page_url)]
             total_vids = len(video_items)
@@ -185,9 +234,7 @@ async def phase3_download(
 
             # Spin browser only if we actually have videos
             if total_vids > 0:
-                p, context = await launch_chromium(
-                    headless=True
-                )
+                p, context = await launch_chromium(headless=True)
             else:
                 p = context = None
 
@@ -205,11 +252,35 @@ async def phase3_download(
             async def vid_worker(box_idx: int, page_url: str):
                 nonlocal vid_count
 
-                if index_file_exists(vid_dir, gallery_name, box_idx):
+                prefix = f"{gallery_name}-{box_idx}"
+
+                # 1) Check disk
+                disk_file = find_index_file(vid_dir, gallery_name, box_idx)
+                if disk_file is not None:
+                    if not bundle_has_file(gallery_name, prefix):
+                        BUNDLE.add_file(
+                            gallery_name,
+                            f"videos/{disk_file.name}",
+                            disk_file.read_bytes()
+                        )
                     vid_count += 1
                     gallery_pbar.update(1)
                     return
 
+                # 2) Check bundle
+                bundle_file = bundle_has_file(gallery_name, prefix)
+                if bundle_file:
+                    data = BUNDLE.read_file(gallery_name, bundle_file)
+                    out_name = Path(bundle_file).name
+                    out_path = vid_dir_path / out_name
+                    vid_dir_path.mkdir(parents=True, exist_ok=True)
+                    out_path.write_bytes(data)
+
+                    vid_count += 1
+                    gallery_pbar.update(1)
+                    return
+
+                # 3) Download and commit
                 async with sem_vid:
                     real_url = await resolve_video_page(context, page_url)
 
@@ -221,8 +292,14 @@ async def phase3_download(
                     download_file, real_url, vid_dir, None, None, box_idx, gallery_name
                 )
 
-                tmp_path = os.path.join(vid_dir, f"{gallery_name}-{box_idx}.tmp")
-                if ok or os.path.exists(tmp_path):
+                disk_file = find_index_file(vid_dir, gallery_name, box_idx)
+                if (ok or disk_file is not None) and disk_file is not None:
+                    if not bundle_has_file(gallery_name, prefix):
+                        BUNDLE.add_file(
+                            gallery_name,
+                            f"videos/{disk_file.name}",
+                            disk_file.read_bytes()
+                        )
                     vid_count += 1
 
                 gallery_pbar.update(1)
@@ -246,6 +323,9 @@ async def phase3_download(
             if p is not None:
                 await p.stop()
 
+            # Persist index after each gallery’s videos pass
+            BUNDLE.save_index()
+
             phase_bar_vids.update(1)
 
     # Run all video galleries with gallery concurrency
@@ -255,7 +335,5 @@ async def phase3_download(
     )
     phase_bar_vids.close()
 
-
     dlog("\n==================== PHASE 3 END ====================\n")
     return stats
-
