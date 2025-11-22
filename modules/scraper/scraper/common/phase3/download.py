@@ -44,16 +44,19 @@ def sanitize_gallery_name(name: str) -> str:
 # ============================================================
 def find_index_file(folder: str, gallery_name: str, idx: int) -> Path | None:
     """
-    Find a file in folder that matches gallery_name-idx with any extension.
-    Returns Path or None.
+    Always return a Path object or None.
     """
     prefix = f"{gallery_name}-{idx}"
-    if not os.path.isdir(folder):
+
+    folder_path = Path(folder)  # ensure Path
+
+    if not folder_path.exists():
         return None
 
-    for fname in os.listdir(folder):
+    for fname in os.listdir(folder_path):
         if fname.startswith(prefix):
-            return Path(folder) / fname
+            return folder_path / fname  # ALWAYS a Path
+
     return None
 
 
@@ -140,7 +143,7 @@ async def phase3_download(
                 # 1) Check disk
                 disk_file = find_index_file(img_dir, gallery_name, box_idx)
                 if disk_file is not None:
-                    if not bundle_has_file(gallery_name, prefix):
+                    if not bundle_has_file(gallery_name, prefix, kind="image"):
                         BUNDLE.add_file(
                             gallery_name,
                             f"images/{disk_file.name}",
@@ -151,7 +154,7 @@ async def phase3_download(
                     return
 
                 # 2) Check bundle
-                bundle_file = bundle_has_file(gallery_name, prefix)
+                bundle_file = bundle_has_file(gallery_name, prefix, kind="image")
                 if bundle_file:
                     data = BUNDLE.read_file(gallery_name, bundle_file)
                     out_name = Path(bundle_file).name
@@ -171,7 +174,7 @@ async def phase3_download(
 
                 disk_file = find_index_file(img_dir, gallery_name, box_idx)
                 if (ok or disk_file is not None) and disk_file is not None:
-                    if not bundle_has_file(gallery_name, prefix):
+                    if not bundle_has_file(gallery_name, prefix, kind="image"):
                         BUNDLE.add_file(
                             gallery_name,
                             f"images/{disk_file.name}",
@@ -191,8 +194,8 @@ async def phase3_download(
                 safe_print(
                     f"🖼️ {gallery_name:<45}|{img_count:>3}/{total_imgs:<3} images 🖼️"
                 )
-
             stats[tag][gallery_name][0] = img_count
+            BUNDLE.save_index()
             phase_bar_imgs.update(1)
 
     # Run all image galleries with gallery concurrency
@@ -257,7 +260,7 @@ async def phase3_download(
                 # 1) Check disk
                 disk_file = find_index_file(vid_dir, gallery_name, box_idx)
                 if disk_file is not None:
-                    if not bundle_has_file(gallery_name, prefix):
+                    if not bundle_has_file(gallery_name, prefix, kind="video"):
                         BUNDLE.add_file(
                             gallery_name,
                             f"videos/{disk_file.name}",
@@ -268,7 +271,7 @@ async def phase3_download(
                     return
 
                 # 2) Check bundle
-                bundle_file = bundle_has_file(gallery_name, prefix)
+                bundle_file = bundle_has_file(gallery_name, prefix, kind="video")
                 if bundle_file:
                     data = BUNDLE.read_file(gallery_name, bundle_file)
                     out_name = Path(bundle_file).name
@@ -294,7 +297,7 @@ async def phase3_download(
 
                 disk_file = find_index_file(vid_dir, gallery_name, box_idx)
                 if (ok or disk_file is not None) and disk_file is not None:
-                    if not bundle_has_file(gallery_name, prefix):
+                    if not bundle_has_file(gallery_name, prefix, kind="video"):
                         BUNDLE.add_file(
                             gallery_name,
                             f"videos/{disk_file.name}",
@@ -315,7 +318,7 @@ async def phase3_download(
                 safe_print(
                     f"🎞️ {gallery_name:<45}|{vid_count:>3}/{total_vids:<3} videos 🎞️"
                 )
-
+            BUNDLE.save_index()
             stats[tag][gallery_name][1] = vid_count
 
             if context is not None:
@@ -325,7 +328,6 @@ async def phase3_download(
 
             # Persist index after each gallery’s videos pass
             BUNDLE.save_index()
-
             phase_bar_vids.update(1)
 
     # Run all video galleries with gallery concurrency
