@@ -15,8 +15,8 @@ services:
         echo '📦 Updating apt...' &&
         apt-get update -y &&
 
-        echo '📦 Installing certs + xz-utils...' &&
-        apt-get install -y ca-certificates xz-utils ffmpeg &&
+        echo '📦 Installing certs + base deps + screen...' &&
+        apt-get install -y ca-certificates xz-utils ffmpeg curl wget gnupg screen &&
         update-ca-certificates &&
 
         echo '🔥 Extracting portable python...' &&
@@ -26,11 +26,17 @@ services:
         echo '🐍 Creating venv using portable python...' &&
         /app/resources/python313/python/bin/python3 -m venv /app/venv &&
 
-        echo '📦 Activating venv and installing playwright & requirements...' &&
+        echo '📦 Activating venv and installing requirements + Playwright...' &&
         source /app/venv/bin/activate &&
+        pip install --upgrade pip &&
         pip install -r requirements.txt &&
-        install playwright &&
-        
+
+        echo '🌐 Installing Playwright browsers...' &&
+        playwright install &&
+
+        echo '📦 Installing Playwright Linux deps...' &&
+        playwright install-deps &&
+
         echo '🚀 Starting bot...' &&
         exec /app/venv/bin/python /app/main.py
       "

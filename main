@@ -9,6 +9,7 @@ fi
 
 CONTAINER="wggbot"
 COMPOSE="docker-compose.yml"
+SCRAPER_SCREEN="scraper"
 
 pause() { read -rp "Press ENTER to continue..."; }
 
@@ -27,6 +28,10 @@ bot_running() {
     docker exec "$CONTAINER" pgrep -f "python .*main.py" >/dev/null 2>&1
 }
 
+scraper_running() {
+    docker exec "$CONTAINER" bash -lc "screen -list | grep -q '\.${SCRAPER_SCREEN}'"
+}
+
 start_bot_inside() {
     echo "🚀 Starting bot inside container..."
     docker exec -d "$CONTAINER" bash -lc "source /app/venv/bin/activate && python /app/main.py"
@@ -38,13 +43,12 @@ attach_logs() {
 }
 
 # -------------------------------
-# ACTION: START
+# ACTION: START BOT
 # -------------------------------
 action_start() {
 
     echo "🔍 Checking container state..."
 
-    # Create container if missing
     if ! container_exists; then
         echo "📦 Container not found — creating with compose..."
         docker compose -f "$COMPOSE" up -d
@@ -53,12 +57,10 @@ action_start() {
 
         echo "🚀 Starting bot..."
         start_bot_inside
-
         attach_logs
         return
     fi
 
-    # If exists but not running -> start container
     if ! container_running; then
         echo "🐳 Starting container..."
         docker start "$CONTAINER"
@@ -68,34 +70,23 @@ action_start() {
         return
     fi
 
-    # If bot already running
     if bot_running; then
         echo "⚠️ Bot is already running inside container."
         attach_logs
         return
     fi
 
-    # If container is running but bot is not
     echo "🐳 Container running — starting bot..."
     start_bot_inside
     attach_logs
 }
 
 # -------------------------------
-# ACTION: STOP
+# ACTION: STOP BOT
 # -------------------------------
 action_stop() {
-    if ! container_exists; then
-        echo "❌ Container does not exist."
-        pause
-        return
-    fi
-
-    if ! container_running; then
-        echo "❌ Container is not running."
-        pause
-        return
-    fi
+    if ! container_exists; then echo "❌ Container does not exist."; pause; return; fi
+    if ! container_running; then echo "❌ Container is not running."; pause; return; fi
 
     if ! bot_running; then
         echo "⚠️ Bot is NOT running."
@@ -109,7 +100,7 @@ action_stop() {
 }
 
 # -------------------------------
-# ACTION: RESTART
+# ACTION: RESTART BOT
 # -------------------------------
 action_restart() {
     action_stop
@@ -118,19 +109,70 @@ action_restart() {
 }
 
 # -------------------------------
-# ACTION: CONTAINER SHELL
+# ACTION: SHELL INTO CONTAINER
 # -------------------------------
 action_shell() {
     if ! container_exists; then echo "❌ Container does not exist."; pause; return; fi
-    docker exec -it "$CONTAINER" bash
+    docker exec -it "$CONTAINER" bash -lc "source /app/venv/bin/activate && exec bash"
 }
 
 # -------------------------------
-# ACTION: VIEW LOGS
+# ACTION: VIEW CONTAINER LOGS
 # -------------------------------
 action_logs() {
     if ! container_running; then echo "❌ Container not running."; pause; return; fi
     docker logs -f "$CONTAINER"
+}
+
+# -------------------------------
+# ACTION: RUN SCRAPER
+# -------------------------------
+action_run_scraper() {
+
+    if ! container_exists; then echo "❌ Container does not exist."; pause; return; fi
+
+    read -rp "Enter tags (space-separated): " raw_tags
+    if [[ -z "$raw_tags" ]]; then
+        echo "❌ No tags provided."
+        pause
+        return
+    fi
+
+    TAG_ARGS=""
+    for t in $raw_tags; do
+        TAG_ARGS="$TAG_ARGS \"$t\""
+    done
+
+    echo "🚀 Launching scraper in screen session '${SCRAPER_SCREEN}'..."
+
+    docker exec "$CONTAINER" bash -lc "
+        screen -S ${SCRAPER_SCREEN} -dm bash -lc '
+            source /app/venv/bin/activate &&
+            cd /app &&
+            python modules/scraper/scraper/main.py ${TAG_ARGS}
+        '
+    "
+
+    echo "📺 Scraper running in detached screen '${SCRAPER_SCREEN}'."
+    echo "➡ Attach: docker exec -it $CONTAINER screen -r ${SCRAPER_SCREEN}"
+    pause
+}
+
+# -------------------------------
+# ACTION: ATTACH TO SCRAPER
+# -------------------------------
+action_attach_scraper() {
+
+    if ! container_exists; then echo "❌ Container does not exist."; pause; return; fi
+
+    if ! scraper_running; then
+        echo "❌ No scraper session is running."
+        pause
+        return
+    fi
+
+    echo "📺 Attaching to scraper screen..."
+    docker exec -it "$CONTAINER" screen -r "${SCRAPER_SCREEN}"
 }
 
 # -------------------------------
@@ -140,21 +182,17 @@ action_destroy_container() {
 
     echo "⚠️ WARNING: This will completely destroy:"
     echo "   • Docker container"
-    echo "   • Docker volumes for this project"
+    echo "   • Docker volumes"
     echo "   • local venv directory"
     echo "   • extracted portable python"
 
     read -rp "Type YES to confirm: " confirm
-    if [[ "$confirm" != "YES" ]]; then
-        echo "❌ Aborted."
-        pause
-        return
-    fi
+    if [[ "$confirm" != "YES" ]]; then echo "❌ Aborted."; pause; return; fi
 
-    echo "🧨 Taking down container with docker compose..."
+    echo "🧨 Taking down container..."
     docker compose -f "$COMPOSE" down || true
 
-    echo "🗑 Removing local venv directory..."
+    echo "🗑 Removing venv..."
     rm -rfv venv || true
 
     echo "🗑 Removing extracted portable python..."
@@ -178,6 +216,8 @@ while true; do
     echo "[4] Shell Into Container"
     echo "[5] View Logs"
     echo "[6] Destroy Container + Wipe Environment"
+    echo "[7] Run Scraper (space-separated tags)"
+    echo "[8] Attach to Scraper"
     echo "[Q] Quit"
     echo "---------------------------------------"
     read -rp "Select an option: " choice
@@ -189,6 +229,8 @@ while true; do
         4) action_shell ;;
         5) action_logs ;;
         6) action_destroy_container ;;
+        7) action_run_scraper ;;
+        8) action_attach_scraper ;;
         q) exit 0 ;;
     esac
 done
