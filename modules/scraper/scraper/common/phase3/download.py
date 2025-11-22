@@ -2,6 +2,7 @@
 #  download.py — Phase 3 (Images + Videos) — PURE PIPELINE
 # ============================================================
 import os
+import re
 import asyncio
 from urllib.parse import urlparse
 from pathlib import Path
@@ -33,11 +34,11 @@ def dlog(*args):
     except:
         pass
 
-import re
 
 def sanitize_gallery_name(name: str) -> str:
     # Windows forbidden: < > : " / \ | ? *
-    return re.sub(r'[<>:"/\\|?*]', '_', name)
+    return re.sub(r'[<>:"/\\|?*]', "_", name)
+
 
 # ============================================================
 #  FILE HELPERS
@@ -45,17 +46,17 @@ def sanitize_gallery_name(name: str) -> str:
 def find_index_file(folder: str, gallery_name: str, idx: int) -> Path | None:
     """
     Always return a Path object or None.
+    We search for any file that starts with f"{gallery_name}-{idx}".
     """
     prefix = f"{gallery_name}-{idx}"
-
-    folder_path = Path(folder)  # ensure Path
+    folder_path = Path(folder)
 
     if not folder_path.exists():
         return None
 
     for fname in os.listdir(folder_path):
         if fname.startswith(prefix):
-            return folder_path / fname  # ALWAYS a Path
+            return folder_path / fname
 
     return None
 
@@ -66,31 +67,35 @@ def index_file_exists(folder: str, gallery_name: str, idx: int) -> bool:
 
 # ============================================================
 #  MASTER PHASE 3 — TRUE GALLERY CONCURRENCY
-#  BUT STRICT ORDER: ALL IMAGES FIRST, THEN ALL VIDEOS
+#  STRICT ORDER: ALL IMAGES FIRST, THEN ALL VIDEOS
 # ============================================================
 async def phase3_download(
     ordered_galleries,
     p2a_results,
     p2b_results,
-    interwoven=False
+    interwoven=False,  # kept for signature compatibility, unused
 ):
     print_banner("Phase 3 — Downloading", "🚀")
     dlog("\n==================== PHASE 3 START ====================\n")
 
-    stats = {}
+    stats: dict[str, dict[str, list[int]]] = {}
 
     def ensure(tag, gallery):
         if tag not in stats:
             stats[tag] = {}
         if gallery not in stats[tag]:
+            # [images, videos]
             stats[tag][gallery] = [0, 0]
 
-    gallery_conc = getattr(settings, "GALLERY_CONC",
-                           getattr(settings, "CONCURRENT_GALLERIES", 2))
-    img_conc = getattr(settings, "IMG_CONC",
-                       getattr(settings, "CONCURRENT_IMAGES_PER_GALLERY", 10))
-    vid_conc = getattr(settings, "VID_CONC",
-                       getattr(settings, "CONCURRENT_VIDEOS_PER_GALLERY", 5))
+    gallery_conc = getattr(
+        settings, "GALLERY_CONC", getattr(settings, "CONCURRENT_GALLERIES", 2)
+    )
+    img_conc = getattr(
+        settings, "IMG_CONC", getattr(settings, "CONCURRENT_IMAGES_PER_GALLERY", 10)
+    )
+    vid_conc = getattr(
+        settings, "VID_CONC", getattr(settings, "CONCURRENT_VIDEOS_PER_GALLERY", 5)
+    )
 
     sem_gallery = asyncio.Semaphore(gallery_conc)
 
@@ -105,7 +110,7 @@ async def phase3_download(
         ncols=66,
         position=1,
         bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} galleries 🖼️",
-        leave=True
+        leave=True,
     )
 
     async def process_gallery_images(link, tag, snippets):
@@ -130,30 +135,36 @@ async def phase3_download(
                 ncols=66,
                 leave=False,
                 position=0,
-                bar_format="{l_bar}{bar}|{n_fmt:>3}/{total_fmt} images 🖼️"
+                bar_format="{l_bar}{bar}|{n_fmt:>3}/{total_fmt} images 🖼️",
             )
 
-            sem_img = asyncio.Semaphore(img_conc)
+            # ----------------------------------------
+            #  PREPASS — DISK + BUNDLE
+            #  1) Use images already on disk
+            #  2) Restore from bundle to disk if needed
+            #  3) Collect truly missing -> for download
+            # ----------------------------------------
+            missing_image_items: list[tuple[int, str]] = []
 
-            async def img_worker(box_idx: int, url: str):
-                nonlocal img_count
-
+            for box_idx, url in image_items:
                 prefix = f"{gallery_name}-{box_idx}"
 
                 # 1) Check disk
                 disk_file = find_index_file(img_dir, gallery_name, box_idx)
                 if disk_file is not None:
+                    # Make sure bundle knows about it
                     if not bundle_has_file(gallery_name, prefix, kind="image"):
                         BUNDLE.add_file(
                             gallery_name,
                             f"images/{disk_file.name}",
-                            disk_file.read_bytes()
+                            disk_file.read_bytes(),
+                            file_type="image",
                         )
                     img_count += 1
                     gallery_pbar.update(1)
-                    return
+                    continue
 
-                # 2) Check bundle
+                # 2) Check bundle (restore to disk)
                 bundle_file = bundle_has_file(gallery_name, prefix, kind="image")
                 if bundle_file:
                     data = BUNDLE.read_file(gallery_name, bundle_file)
@@ -164,9 +175,19 @@ async def phase3_download(
 
                     img_count += 1
                     gallery_pbar.update(1)
-                    return
+                    continue
 
-                # 3) Download and commit
+                # 3) Truly missing -> must download
+                missing_image_items.append((box_idx, url))
+
+            # ----------------------------------------
+            #  DOWNLOAD MISSING IMAGES ONLY
+            # ----------------------------------------
+            sem_img = asyncio.Semaphore(img_conc)
+
+            async def img_worker(box_idx: int, url: str):
+                nonlocal img_count
+
                 async with sem_img:
                     ok = await asyncio.to_thread(
                         download_file, url, img_dir, None, None, box_idx, gallery_name
@@ -174,19 +195,20 @@ async def phase3_download(
 
                 disk_file = find_index_file(img_dir, gallery_name, box_idx)
                 if (ok or disk_file is not None) and disk_file is not None:
-                    if not bundle_has_file(gallery_name, prefix, kind="image"):
-                        BUNDLE.add_file(
-                            gallery_name,
-                            f"images/{disk_file.name}",
-                            disk_file.read_bytes()
-                        )
+                    # New file -> record in bundle (no need to re-check)
+                    BUNDLE.add_file(
+                        gallery_name,
+                        f"images/{disk_file.name}",
+                        disk_file.read_bytes(),
+                        file_type="image",
+                    )
                     img_count += 1
 
                 gallery_pbar.update(1)
 
-            if image_items:
+            if missing_image_items:
                 await asyncio.gather(
-                    *(img_worker(box_idx, url) for box_idx, url in image_items)
+                    *(img_worker(box_idx, url) for box_idx, url in missing_image_items)
                 )
 
             gallery_pbar.close()
@@ -194,14 +216,15 @@ async def phase3_download(
                 safe_print(
                     f"🖼️ {gallery_name:<45}|{img_count:>3}/{total_imgs:<3} images 🖼️"
                 )
+
+            # Track stats + persist bundle index once per gallery
             stats[tag][gallery_name][0] = img_count
             BUNDLE.save_index()
             phase_bar_imgs.update(1)
 
-    # Run all image galleries with gallery concurrency
+    # Run all image galleries
     await asyncio.gather(
-        *(process_gallery_images(link, tag, snippets)
-          for (link, tag, snippets) in ordered_galleries)
+        *(process_gallery_images(link, tag, snippets) for (link, tag, snippets) in ordered_galleries)
     )
     phase_bar_imgs.close()
 
@@ -216,7 +239,7 @@ async def phase3_download(
         ncols=66,
         position=1,
         bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} galleries 🎞️",
-        leave=True
+        leave=True,
     )
 
     async def process_gallery_videos(link, tag, snippets):
@@ -235,26 +258,24 @@ async def phase3_download(
             total_vids = len(video_items)
             vid_count = 0
 
-            # Spin browser only if we actually have videos
-            if total_vids > 0:
-                p, context = await launch_chromium(headless=True)
-            else:
-                p = context = None
-
             gallery_pbar = tqdm(
                 total=total_vids,
                 desc=f"🎞️ {gallery_name}"[:20].ljust(20),
                 ncols=66,
                 leave=False,
                 position=0,
-                bar_format="{l_bar}{bar}|{n_fmt:>3}/{total_fmt:<3} videos 🎞️"
+                bar_format="{l_bar}{bar}|{n_fmt:>3}/{total_fmt:<3} videos 🎞️",
             )
 
-            sem_vid = asyncio.Semaphore(vid_conc)
+            # ----------------------------------------
+            #  PREPASS — DISK + BUNDLE for VIDEOS
+            #  1) Use videos already on disk
+            #  2) Restore from bundle
+            #  3) Collect truly missing -> for download
+            # ----------------------------------------
+            missing_video_items: list[tuple[int, str]] = []
 
-            async def vid_worker(box_idx: int, page_url: str):
-                nonlocal vid_count
-
+            for box_idx, page_url in video_items:
                 prefix = f"{gallery_name}-{box_idx}"
 
                 # 1) Check disk
@@ -264,13 +285,14 @@ async def phase3_download(
                         BUNDLE.add_file(
                             gallery_name,
                             f"videos/{disk_file.name}",
-                            disk_file.read_bytes()
+                            disk_file.read_bytes(),
+                            file_type="video",
                         )
                     vid_count += 1
                     gallery_pbar.update(1)
-                    return
+                    continue
 
-                # 2) Check bundle
+                # 2) Check bundle (video only)
                 bundle_file = bundle_has_file(gallery_name, prefix, kind="video")
                 if bundle_file:
                     data = BUNDLE.read_file(gallery_name, bundle_file)
@@ -281,36 +303,49 @@ async def phase3_download(
 
                     vid_count += 1
                     gallery_pbar.update(1)
-                    return
+                    continue
 
-                # 3) Download and commit
-                async with sem_vid:
-                    real_url = await resolve_video_page(context, page_url)
+                # 3) Truly missing video -> must resolve + download
+                missing_video_items.append((box_idx, page_url))
 
-                if not real_url:
-                    gallery_pbar.update(1)
-                    return
+            # If no missing videos, we never touch Chromium
+            p = None
+            context = None
 
-                ok = await asyncio.to_thread(
-                    download_file, real_url, vid_dir, None, None, box_idx, gallery_name
-                )
+            if missing_video_items:
+                # Spin browser only if needed
+                p, context = await launch_chromium(headless=True)
+                sem_vid = asyncio.Semaphore(vid_conc)
 
-                disk_file = find_index_file(vid_dir, gallery_name, box_idx)
-                if (ok or disk_file is not None) and disk_file is not None:
-                    if not bundle_has_file(gallery_name, prefix, kind="video"):
+                async def vid_worker(box_idx: int, page_url: str):
+                    nonlocal vid_count
+
+                    async with sem_vid:
+                        real_url = await resolve_video_page(context, page_url)
+
+                    if not real_url:
+                        gallery_pbar.update(1)
+                        return
+
+                    ok = await asyncio.to_thread(
+                        download_file, real_url, vid_dir, None, None, box_idx, gallery_name
+                    )
+
+                    disk_file = find_index_file(vid_dir, gallery_name, box_idx)
+                    if (ok or disk_file is not None) and disk_file is not None:
+                        # New video file -> record in bundle
                         BUNDLE.add_file(
                             gallery_name,
                             f"videos/{disk_file.name}",
-                            disk_file.read_bytes()
+                            disk_file.read_bytes(),
+                            file_type="video",
                         )
-                    vid_count += 1
+                        vid_count += 1
 
-                gallery_pbar.update(1)
+                    gallery_pbar.update(1)
 
-            if video_items:
                 await asyncio.gather(
-                    *(vid_worker(box_idx, page_url)
-                      for box_idx, page_url in video_items)
+                    *(vid_worker(box_idx, page_url) for box_idx, page_url in missing_video_items)
                 )
 
             gallery_pbar.close()
@@ -318,7 +353,7 @@ async def phase3_download(
                 safe_print(
                     f"🎞️ {gallery_name:<45}|{vid_count:>3}/{total_vids:<3} videos 🎞️"
                 )
-            BUNDLE.save_index()
+
             stats[tag][gallery_name][1] = vid_count
 
             if context is not None:
@@ -326,14 +361,13 @@ async def phase3_download(
             if p is not None:
                 await p.stop()
 
-            # Persist index after each gallery’s videos pass
+            # Persist index after each gallery’s videos
             BUNDLE.save_index()
             phase_bar_vids.update(1)
 
-    # Run all video galleries with gallery concurrency
+    # Run all video galleries
     await asyncio.gather(
-        *(process_gallery_videos(link, tag, snippets)
-          for (link, tag, snippets) in ordered_galleries)
+        *(process_gallery_videos(link, tag, snippets) for (link, tag, snippets) in ordered_galleries)
     )
     phase_bar_vids.close()
 
