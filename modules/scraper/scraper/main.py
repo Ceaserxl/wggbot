@@ -72,6 +72,9 @@ async def main(tags, galleries, reverse_flag, simulate_flag, summary_flag):
         # -------------------------
         if tags:
             tag_to_galleries, all_galleries = await phase1A_collect_urls(tags)
+            # Save tags to history
+            for t in tags:
+                await cache_db.save_last_tag(t)
         else:
             tag_to_galleries = {"manual": galleries}
             all_galleries = set(galleries)
@@ -79,7 +82,6 @@ async def main(tags, galleries, reverse_flag, simulate_flag, summary_flag):
         if not all_galleries:
             safe_print("❌ No galleries found.")
             return
-
         # -------------------------
         #  Phase 1B — scroll galleries → snippets
         # -------------------------
@@ -130,7 +132,7 @@ async def main(tags, galleries, reverse_flag, simulate_flag, summary_flag):
         ]
         # ✅ Sort galleries by snippet count (least → most)
         ordered.sort(key=lambda x: len(x[2]))
-        
+
         print_summary(
             f"Min boxes: {settings.REQUIRED_MIN_BOXES}",
             f"Accepted galleries: {len(galleries_clean)}",
@@ -193,31 +195,59 @@ if __name__ == "__main__":
     asyncio.run(cache_db.init_db())
 
     parser = argparse.ArgumentParser(description="Ultimate TheFap Scraper")
-
     parser.add_argument("tags", nargs="*", help="Search tags")
     parser.add_argument("-g", "--galleries", nargs="+")
     parser.add_argument("--tags-file")
     parser.add_argument("--galleries-file")
+
+    # --last (with optional numeric value)
     parser.add_argument("--last", nargs="?", const="all")
 
     args = parser.parse_args()
 
-    tags = args.tags or []
-    galleries = args.galleries or []
+    tags = list(args.tags) if args.tags else []
+    galleries = list(args.galleries) if args.galleries else []
 
+    # --- Load tags from file ---
     if args.tags_file:
-        tags.extend([t.strip() for t in open(args.tags_file).read().splitlines()])
+        try:
+            with open(args.tags_file, "r", encoding="utf-8") as f:
+                tags.extend([t.strip() for t in f.readlines() if t.strip()])
+        except:
+            print(f"❌ Failed to read tags file: {args.tags_file}")
+            sys.exit(1)
 
+    # --- Load galleries from file ---
     if args.galleries_file:
-        galleries.extend([g.strip() for g in open(args.galleries_file).read().splitlines()])
+        try:
+            with open(args.galleries_file, "r", encoding="utf-8") as f:
+                galleries.extend([g.strip() for g in f.readlines() if g.strip()])
+        except:
+            print(f"❌ Failed to read galleries file: {args.galleries_file}")
+            sys.exit(1)
 
-    # history
-    if args.last:
-        if args.last == "all":
+    # --- Handle --last ---
+    if args.last is not None:
+        val = str(args.last).strip().lower()
+
+        # get all tags
+        if val == "" or val == "all":
             tags = asyncio.run(cache_db.get_last(None))
-        else:
-            tags = asyncio.run(cache_db.get_last(int(args.last)))
 
+        else:
+            # numeric limit
+            try:
+                n = int(val)
+                tags = asyncio.run(cache_db.get_last(n))
+            except ValueError:
+                print(f"❌ Invalid --last value: {args.last}")
+                sys.exit(1)
+
+        # explicitly override user tags only when --last was used
+        # and make sure it's not None
+        tags = tags or []
+
+    # --- Normalize tags ---
     tags = sorted({t.lower() for t in tags if t.strip()})
 
     if not tags and not galleries:
@@ -229,8 +259,16 @@ if __name__ == "__main__":
         f"Loaded Tags: {len(tags)}",
         emoji="🧭",
     )
+
     print_banner("Phase 0 - Pre Cleaning...")
     wipe_debug_logs()
+
     asyncio.run(
-        main(tags, galleries, reverse_flag=False, simulate_flag=False, summary_flag=True)
+        main(
+            tags,
+            galleries,
+            reverse_flag=False,
+            simulate_flag=False,
+            summary_flag=True
+        )
     )

@@ -138,10 +138,10 @@ async def phase3_download(
                 await asyncio.gather(*tasks)
 
             gallery_pbar.close()
-
-            safe_print(
-                f"🖼️ {gallery_name:<45}|{img_count:>3}/{total_imgs:<3} images 🖼️"
-            )
+            if not total_imgs == 0:
+                safe_print(
+                    f"🖼️ {gallery_name:<45}|{img_count:>3}/{total_imgs:<3} images 🖼️"
+                )
 
             stats[tag][gallery_name][0] = img_count
             phase_bar.update(1)
@@ -225,10 +225,10 @@ async def phase3_download(
                 await asyncio.gather(*tasks)
 
             gallery_pbar.close()
-
-            safe_print(
-                f"🎞️ {gallery_name:<45}|{vid_count:>3}/{total_vids:<3} videos 🎞️"
-            )
+            if not total_vids == 0:
+                safe_print(
+                    f"🎞️ {gallery_name:<45}|{vid_count:>3}/{total_vids:<3} videos 🎞️"
+                )
 
             stats[tag][gallery_name][1] = vid_count
 

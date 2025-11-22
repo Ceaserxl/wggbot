@@ -40,3 +40,7 @@ Thumbs.db
 # Images & tokens (your originals)
 images/
 cookies.txt
+
+downloads/
+downloads_win/
+*_debug.txt

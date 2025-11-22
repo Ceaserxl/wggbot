@@ -229,3 +229,39 @@ async def get_gallery_video_pages(url: str):
         rows = await cur.fetchall()
 
     return [(r[0], r[1]) for r in rows]
+
+# ============================================================
+#  HISTORY TAGS — Save + Get Last Tags
+# ============================================================
+
+async def save_last_tag(tag: str):
+    """Stores the tag in the history table with timestamp."""
+    tag = tag.lower()
+    now = int(time.time())
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Replace older entry for same tag
+        await db.execute(
+            """
+            INSERT OR REPLACE INTO history_tags (tag, added_at)
+            VALUES (?, ?)
+            """,
+            (tag, now),
+        )
+        await db.commit()
+
+
+async def get_last(n: int | None = None):
+    async with aiosqlite.connect(DB_PATH) as db:
+        if n is None:
+            cur = await db.execute(
+                "SELECT tag FROM history_tags ORDER BY added_at DESC"
+            )
+        else:
+            cur = await db.execute(
+                "SELECT tag FROM history_tags ORDER BY added_at DESC LIMIT ?",
+                (n,),
+            )
+        rows = await cur.fetchall()
+
+    return [r[0] for r in rows] if rows else []
