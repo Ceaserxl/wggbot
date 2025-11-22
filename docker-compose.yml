@@ -3,6 +3,9 @@ services:
     container_name: wggbot
     image: ubuntu:22.04
     working_dir: /app
+    environment:
+      - LANG=en_US.UTF-8
+      - LC_ALL=en_US.UTF-8
     volumes:
       - ./:/app
     command: >
@@ -15,8 +18,15 @@ services:
         echo '📦 Updating apt...' &&
         apt-get update -y &&
 
-        echo '📦 Installing certs + base deps + screen...' &&
-        apt-get install -y ca-certificates xz-utils ffmpeg curl wget gnupg screen &&
+        echo '🌍 Installing locales + base deps...' &&
+        apt-get install -y locales ca-certificates xz-utils ffmpeg curl wget gnupg screen &&
+
+        echo '🌍 Generating en_US.UTF-8 locale...' &&
+        sed -i 's/^# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen &&
+        locale-gen en_US.UTF-8 &&
+        update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 &&
+
+        echo '📦 Updating CA certificates...' &&
         update-ca-certificates &&
 
         echo '🔥 Extracting portable python...' &&
@@ -31,12 +41,12 @@ services:
         pip install --upgrade pip &&
         pip install -r requirements.txt &&
 
-        echo '🌐 Installing Playwright browsers...' &&
-        playwright install &&
-
         echo '📦 Installing Playwright Linux deps...' &&
         playwright install-deps &&
 
+        echo '🌐 Installing Playwright browsers...' &&
+        playwright install &&
+        
         echo '🚀 Starting bot...' &&
         exec /app/venv/bin/python /app/main.py
       "
