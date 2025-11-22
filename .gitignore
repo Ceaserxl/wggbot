@@ -45,3 +45,4 @@ downloads/
 downloads_win/
 *_debug.txt
 cache/
+export/

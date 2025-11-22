@@ -186,7 +186,6 @@ async def main(tags, galleries, reverse_flag, simulate_flag, summary_flag):
             safe_print(f"📦 {tag:<37} | {imgs} images, {vids} videos 📦")
         safe_print("📦 " + "═" * 60 + " 📦")
 
-
 # ============================================================
 #  ENTRY POINT
 # ============================================================
@@ -199,12 +198,23 @@ if __name__ == "__main__":
     parser.add_argument("-g", "--galleries", nargs="+")
     parser.add_argument("--tags-file")
     parser.add_argument("--galleries-file")
-
-    # --last (with optional numeric value)
     parser.add_argument("--last", nargs="?", const="all")
+    parser.add_argument("--export", action="store_true", help="Export DB tables to ./export")
 
     args = parser.parse_args()
 
+    # =======================
+    # 1. EXPORT MODE ONLY
+    # =======================
+    if args.export:
+        print("📤 Exporting database tables to ./export ...")
+        asyncio.run(cache_db.export_all_tables("export"))
+        print("✅ Export complete.")
+        sys.exit(0)
+
+    # =======================
+    # 2. NORMAL MODE
+    # =======================
     tags = list(args.tags) if args.tags else []
     galleries = list(args.galleries) if args.galleries else []
 
@@ -230,12 +240,9 @@ if __name__ == "__main__":
     if args.last is not None:
         val = str(args.last).strip().lower()
 
-        # get all tags
         if val == "" or val == "all":
             tags = asyncio.run(cache_db.get_last(None))
-
         else:
-            # numeric limit
             try:
                 n = int(val)
                 tags = asyncio.run(cache_db.get_last(n))
@@ -243,8 +250,6 @@ if __name__ == "__main__":
                 print(f"❌ Invalid --last value: {args.last}")
                 sys.exit(1)
 
-        # explicitly override user tags only when --last was used
-        # and make sure it's not None
         tags = tags or []
 
     # --- Normalize tags ---

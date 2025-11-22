@@ -68,6 +68,66 @@ async def init_db():
         await db.executescript(CREATE_TABLES)
         await db.commit()
 
+async def export_all_tables(out_dir: str):
+    os.makedirs(out_dir, exist_ok=True)
+
+    async with aiosqlite.connect(DB_PATH) as db:
+
+        # -----------------------------------------------------
+        # tag_gallery
+        # -----------------------------------------------------
+        cur = await db.execute("SELECT tag, gallery FROM tag_gallery")
+        rows = await cur.fetchall()
+        with open(os.path.join(out_dir, "tag_gallery.txt"), "w", encoding="utf-8") as f:
+            f.write("tag\tgallery\n")
+            for r in rows:
+                f.write(f"{r[0]}\t{r[1]}\n")
+
+        # -----------------------------------------------------
+        # galleries
+        # -----------------------------------------------------
+        cur = await db.execute("""
+            SELECT gallery, raw_box_count, box_count, img_count, vid_count, scanned_at
+            FROM galleries
+        """)
+        rows = await cur.fetchall()
+        with open(os.path.join(out_dir, "galleries.txt"), "w", encoding="utf-8") as f:
+            f.write("gallery\traw_box_count\tbox_count\timg_count\tvid_count\tscanned_at\n")
+            for r in rows:
+                f.write("\t".join(str(x) for x in r) + "\n")
+
+        # -----------------------------------------------------
+        # gallery_items
+        # -----------------------------------------------------
+        cur = await db.execute("""
+            SELECT gallery, idx, kind, html
+            FROM gallery_items
+            ORDER BY gallery, idx
+        """)
+        rows = await cur.fetchall()
+        with open(os.path.join(out_dir, "gallery_items.txt"), "w", encoding="utf-8") as f:
+            f.write("gallery\tidx\tkind\thtml\n")
+            for r in rows:
+                f.write(f"{r[0]}\t{r[1]}\t{r[2]}\t{r[3]}\n")
+
+        # -----------------------------------------------------
+        # history_tags (full table export)
+        # -----------------------------------------------------
+        cur = await db.execute(
+            "SELECT tag, added_at FROM history_tags ORDER BY added_at DESC"
+        )
+        rows = await cur.fetchall()
+        with open(os.path.join(out_dir, "history_tags.txt"), "w", encoding="utf-8") as f:
+            f.write("tag\tadded_at\n")
+            for r in rows:
+                f.write(f"{r[0]}\t{r[1]}\n")
+
+        # -----------------------------------------------------
+        # last.txt — only tags, newest first
+        # -----------------------------------------------------
+        with open(os.path.join(out_dir, "last.txt"), "w", encoding="utf-8") as f:
+            for r in rows:
+                f.write(r[0] + "\n")
 
 # ============================================================
 #  TAG CACHE (unchanged)
