@@ -2,14 +2,13 @@
 
 import logging
 import discord
-import core.config
+from core.config import cfg, cfg_bool
 from discord.ext import commands
 
 # -------------------------------------------------------------------
 # Logging
 # -------------------------------------------------------------------
 logging.basicConfig(level=logging.WARNING)
-
 
 # -------------------------------------------------------------------
 # Bot Setup
@@ -20,8 +19,6 @@ intents.guilds = True
 intents.voice_states = True
 
 bot = commands.Bot(command_prefix='/', intents=intents)
-
-
 # -------------------------------------------------------------------
 # /ping — global command
 # -------------------------------------------------------------------
@@ -38,30 +35,33 @@ import os
 import importlib
 
 def load_modules():
-    base_path = "modules"
+    import os, importlib
 
-    for module_folder in os.listdir(base_path):
-        folder_path = os.path.join(base_path, module_folder)
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    modules_dir = os.path.join(BASE_DIR, "modules")
 
-        # Skip non-folders
+    if not os.path.isdir(modules_dir):
+        print(f"[WARN] Module folder missing: {modules_dir}")
+        return
+
+    for module_folder in os.listdir(modules_dir):
+        folder_path = os.path.join(modules_dir, module_folder)
+
         if not os.path.isdir(folder_path):
             continue
 
-        # Look for commands.py inside the folder
-        commands_file = os.path.join(folder_path, "commands.py")
-        if not os.path.isfile(commands_file):
+        # must contain __init__.py
+        if not os.path.isfile(os.path.join(folder_path, "__init__.py")):
+            print(f"[SKIP] No __init__.py in: {folder_path}")
             continue
 
-        import_path = f"{base_path}.{module_folder}.commands"
+        module_name = f"modules.{module_folder}"
 
         try:
-            module = importlib.import_module(import_path)
-            if hasattr(module, "setup"):
-                module.setup(bot)
-                print(f"Loaded module: {import_path}")
+            importlib.import_module(module_name)
+            print(f"[OK] Loaded module: {module_folder}")
         except Exception as e:
-            print(f"Failed to load module {import_path}: {e}")
-
+            print(f"[ERR] Failed to load {module_folder}: {e}")
 
 # -------------------------------------------------------------------
 # on_ready
@@ -95,4 +95,9 @@ async def on_message(message):
 # -------------------------------------------------------------------
 # Entrypoint
 # -------------------------------------------------------------------
-bot.run(keys.DISCORD_TOKEN)
+debug = cfg_bool("wggbot", "debug")
+discord_token = cfg("wggbot", "LIVE_DISCORD_TOKEN")
+beta_token = cfg("wggbot", "BETA_DISCORD_TOKEN")
+if debug:
+    discord_token = beta_token
+bot.run(discord_token)
