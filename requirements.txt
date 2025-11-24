@@ -14,5 +14,7 @@ multidict==6.7.0
 propcache==0.4.1
 pycparser==2.23
 PyNaCl==1.6.1
+requests==2.32.5
 urllib3==2.5.0
 yarl==1.22.0
+yt-dlp==2025.11.12

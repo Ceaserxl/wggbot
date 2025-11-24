@@ -2,6 +2,7 @@ import os
 import sys
 import subprocess
 import time
+import signal
 
 # ============================================================
 # UTILITIES
@@ -27,7 +28,7 @@ def pip_cmd(args):
     return subprocess.call([python, "-m", "pip"] + args)
 
 def bot_running():
-    """Returns True if bot.pid exists AND the process is alive."""
+    """Returns True if bot.pid exists AND process is alive."""
     if not os.path.exists("bot.pid"):
         return False
 
@@ -37,7 +38,6 @@ def bot_running():
     except:
         return False
 
-    # Check if the PID exists
     try:
         out = subprocess.check_output(f"tasklist /FI \"PID eq {pid}\"", shell=True)
         return str(pid) in out.decode()
@@ -45,64 +45,40 @@ def bot_running():
         return False
 
 # ============================================================
-# MAIN MENU
+# START BOT — INTERACTIVE (NORMAL) MODE
 # ============================================================
 
-def main_menu():
-    while True:
-        cls()
-        header()
+def start_bot_interactive():
+    cls()
+    header()
 
-        running = bot_running()
+    if bot_running():
+        print("[!] Bot is already running (headless mode).")
+        input("\nPress ENTER...")
+        return
 
-        print("1) Start Bot" if not running else "1) Bot is running")
-        if running:
-            print("2) Stop Bot")
-        else:
-            print("2) Check for Updates")
+    python = get_venv_python()
+    if not os.path.exists(python):
+        print("[!] Virtual environment missing.")
+        input("\nPress ENTER...")
+        return
 
-        print("3) Open Logs")
-        print("4) Install a Pip Package")
-        print("5) Export Requirements")
-        print("6) Install Bot requirements.txt")
-        print("7) Install Module requirements")
-        print("8) Exit\n")
+    print("[*] Launching bot in interactive mode...\n")
+    print("[INFO] Press CTRL+C to stop the bot manually.")
+    print("===========================================\n")
 
-        choice = input("Select an option: ").strip()
+    try:
+        subprocess.call([python, "app/bot.py"])
+    except KeyboardInterrupt:
+        print("\n[OK] Bot stopped via CTRL+C")
 
-        if not running:
-            if choice == "1":
-                start_bot()
-            elif choice == "2":
-                check_updates()
-        else:
-            if choice == "2":
-                stop_bot()
-
-        if choice == "3":
-            open_logs()
-        elif choice == "4":
-            install_pip_package()
-        elif choice == "5":
-            export_requirements()
-        elif choice == "6":
-            install_bot_requirements()
-        elif choice == "7":
-            install_module_requirements()
-        elif choice == "8":
-            cls()
-            print("Exiting WGGBot controller...")
-            sys.exit(0)
+    input("\nPress ENTER...")
 
 # ============================================================
-# START BOT (HEADLESS)
+# START BOT — HEADLESS MODE
 # ============================================================
-import subprocess
-import os
-import time
-import signal
 
-def start_bot():
+def start_bot_headless():
     cls()
     header()
 
@@ -112,19 +88,16 @@ def start_bot():
         return
 
     python = get_venv_python()
-
     if not os.path.exists(python):
         print("[!] Virtual environment missing.")
         input("\nPress ENTER...")
         return
 
-    print("[*] Starting bot (cross-platform headless)...")
+    print("[*] Starting bot headless...")
 
-    # Ensure logs folder exists
     os.makedirs("logs", exist_ok=True)
     log_path = os.path.join("logs", "bot.log")
 
-    # Start bot process (UNIVERSAL)
     with open(log_path, "w") as log:
         process = subprocess.Popen(
             [python, "app/bot.py"],
@@ -133,16 +106,16 @@ def start_bot():
             stdin=subprocess.DEVNULL
         )
 
-    # Save PID
     with open("bot.pid", "w") as f:
         f.write(str(process.pid))
 
-    print(f"[OK] Bot started (PID {process.pid})")
+    print(f"[OK] Bot started headless (PID {process.pid})")
     input("\nPress ENTER...")
 
 # ============================================================
 # STOP BOT
 # ============================================================
+
 def stop_bot():
     cls()
     header()
@@ -158,29 +131,27 @@ def stop_bot():
     print(f"[*] Sending graceful shutdown to PID {pid}...\n")
 
     try:
-        os.kill(pid, signal.SIGINT)   # ask python to quit cleanly
-    except Exception:
+        os.kill(pid, signal.SIGINT)
+    except:
         pass
 
     time.sleep(1)
 
-    # Check if still running
     if bot_running():
-        print("[!] Graceful shutdown failed, forcing stop...")
+        print("[!] Graceful shutdown failed — sending SIGTERM...")
         try:
             os.kill(pid, signal.SIGTERM)
-        except Exception:
+        except:
             pass
         time.sleep(0.5)
 
     if bot_running():
-        print("[!] Process still alive — final force kill...")
+        print("[!] Final fallback — force killing...")
         try:
             os.kill(pid, signal.SIGKILL)
-        except Exception:
+        except:
             pass
 
-    # Remove PID file
     if os.path.exists("bot.pid"):
         os.remove("bot.pid")
 
@@ -190,6 +161,7 @@ def stop_bot():
 # ============================================================
 # CHECK UPDATES
 # ============================================================
+
 def check_updates():
     cls()
     header()
@@ -200,6 +172,7 @@ def check_updates():
 # ============================================================
 # OPEN LOGS
 # ============================================================
+
 def open_logs():
     cls()
     header()
@@ -212,41 +185,37 @@ def open_logs():
         return
 
     print("========== BOT LOGS ==========\n")
-
     try:
         with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
-            content = f.read()
-            print(content if content.strip() else "[log is empty]")
+            data = f.read()
+            print(data if data.strip() else "[log is empty]")
     except Exception as e:
-        print(f"[!] Failed to read logs: {e}")
+        print(f"[!] Unable to read logs: {e}")
 
     print("\n==============================")
     input("\nPress ENTER...")
 
 # ============================================================
-# INSTALL A PIP PACKAGE
+# PIP PACKAGE INSTALLER
 # ============================================================
+
 def install_pip_package():
     cls()
     header()
-    pkg = input("Package name (example: requests or requests==2.31): ").strip()
+    pkg = input("Package name: ").strip()
 
     if not pkg:
         input("No package entered. Press ENTER...")
         return
 
     print(f"\n[*] Installing '{pkg}'...\n")
-
-    if pip_cmd(["install", pkg]) == 0:
-        print("\n[OK] Package installed.")
-    else:
-        print("\n[!] Installation failed.")
-
+    pip_cmd(["install", pkg])
     input("\nPress ENTER...")
 
 # ============================================================
 # EXPORT REQUIREMENTS
 # ============================================================
+
 def export_requirements():
     cls()
     header()
@@ -267,6 +236,7 @@ def export_requirements():
 # ============================================================
 # INSTALL BOT REQUIREMENTS
 # ============================================================
+
 def install_bot_requirements():
     cls()
     header()
@@ -277,16 +247,13 @@ def install_bot_requirements():
         input("\nPress ENTER...")
         return
 
-    if pip_cmd(["install", "-r", "requirements.txt"]) == 0:
-        print("\n[OK] Bot requirements installed.")
-    else:
-        print("\n[!] Failed to install bot requirements.")
-
+    pip_cmd(["install", "-r", "requirements.txt"])
     input("\nPress ENTER...")
 
 # ============================================================
 # INSTALL MODULE REQUIREMENTS
 # ============================================================
+
 def install_module_requirements():
     cls()
     header()
@@ -313,9 +280,68 @@ def install_module_requirements():
     if not found:
         print("[!] No module requirements.txt files found.")
     else:
-        print("\n[OK] All module requirements installed.")
+        print("[OK] All module requirements installed.")
 
     input("\nPress ENTER...")
+
+# ============================================================
+# MAIN MENU
+# ============================================================
+
+def main_menu():
+    while True:
+        cls()
+        header()
+
+        running = bot_running()
+
+        print("1) Start Bot (Interactive)")
+        print("2) Start Bot (Headless)")
+        print("3) Stop Bot" if running else "3) Check for Updates")
+        print("4) Open Logs")
+        print("5) Install a Pip Package")
+        print("6) Export Requirements")
+        print("7) Install Bot requirements.txt")
+        print("8) Install Module requirements")
+        print("E) Exit\n")
+
+        choice = input("Select an option: ").strip().lower()
+
+        if choice == "1":
+            start_bot_interactive()
+
+        elif choice == "2":
+            start_bot_headless()
+
+        elif choice == "3":
+            if running:
+                stop_bot()
+            else:
+                check_updates()
+
+        elif choice == "4":
+            open_logs()
+
+        elif choice == "5":
+            install_pip_package()
+
+        elif choice == "6":
+            export_requirements()
+
+        elif choice == "7":
+            install_bot_requirements()
+
+        elif choice == "8":
+            install_module_requirements()
+
+        elif choice == "e":
+            cls()
+            print("Exiting WGGBot controller...")
+            sys.exit(0)
+
+        else:
+            input("Invalid option. Press ENTER...")
+
 
 # ============================================================
 if __name__ == "__main__":
