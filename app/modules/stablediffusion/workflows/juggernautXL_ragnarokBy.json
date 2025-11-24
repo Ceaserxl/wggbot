@@ -1,0 +1,112 @@
+{
+  "1": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "Juggernaut-XI-v11.safetensors"
+    }
+  },
+
+  "2": {
+    "class_type": "LoraLoader",
+    "inputs": {
+      "model": ["1", 0],
+      "clip": ["1", 1],
+      "lora_name": "detail-tweaker.safetensors",
+      "strength_model": 0.65,
+      "strength_clip": 0.65
+    }
+  },
+
+  "3": {
+    "class_type": "LoraLoader",
+    "inputs": {
+      "model": ["2", 0],
+      "clip": ["2", 1],
+      "lora_name": "Harrlogos_v2.0.safetensors",
+      "strength_model": 0.55,
+      "strength_clip": 0.55
+    }
+  },
+
+  "4": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": ["3", 1],
+      "text": ""
+    }
+  },
+
+  "5": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": ["3", 1],
+      "text": "(worst quality:1.4), (low quality:1.3), lowres, blurry, bad anatomy, bad hands, missing fingers, extra fingers, extra limbs, deformed, mutated, malformed face, distorted body, watermark, logo watermark, text artifacts, jpeg artifacts, overexposed, underexposed, oversharpened, noisy background"
+    }
+  },
+
+  "6": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 1
+    }
+  },
+
+  "7": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["3", 0],
+      "positive": ["4", 0],
+      "negative": ["5", 0],
+      "latent_image": ["6", 0],
+      "seed": 0,
+      "steps": 32,
+      "cfg": 7.0,
+      "sampler_name": "euler",
+      "scheduler": "karras",
+      "denoise": 1.0
+    }
+  },
+
+  "8": {
+    "class_type": "LatentUpscaleBy",
+    "inputs": {
+      "samples": ["7", 0],
+      "upscale_method": "nearest-exact",
+      "scale_by": 1.5
+    }
+  },
+
+  "9": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["3", 0],
+      "positive": ["4", 0],
+      "negative": ["5", 0],
+      "latent_image": ["8", 0],
+      "seed": 0,
+      "steps": 14,
+      "cfg": 6.0,
+      "sampler_name": "euler",
+      "scheduler": "karras",
+      "denoise": 0.35
+    }
+  },
+
+  "10": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["9", 0],
+      "vae": ["1", 2]
+    }
+  },
+
+  "11": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["10", 0],
+      "filename_prefix": "juggernaut_xi_nsfw"
+    }
+  }
+}
