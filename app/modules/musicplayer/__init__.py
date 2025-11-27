@@ -6,7 +6,6 @@ from app.core.config import ensure_settings
 
 # Default settings for the music player module
 DEFAULTS = {
-    "enabled": "true",
     "volume": "50",
     "autojoin": "true",
     "max_queue": "25"

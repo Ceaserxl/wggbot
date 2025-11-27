@@ -11,8 +11,6 @@ LOG_FILE = os.path.join(LOG_DIR, "module_stablediffusion.log")
 # ComfyUI-specific defaults
 DEFAULTS = {
     "sd_host": "http://127.0.0.1:8188",   # ComfyUI API
-    "enabled": "true",
-
     # Qwen workflow defaults (fixed)
     "default_width": "512",
     "default_height": "512",
