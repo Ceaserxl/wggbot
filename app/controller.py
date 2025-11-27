@@ -1,20 +1,18 @@
+# app/controller.py
 import os
 import sys
 import subprocess
 import time
 import signal
+from core.logging import log
 
 # ============================================================
 # UTILITIES
 # ============================================================
-
-def cls():
-    os.system("cls" if os.name == "nt" else "clear")
-
 def header():
-    print("===========================================")
-    print("               WGGBot Controller")
-    print("===========================================\n")
+    log("===========================================")
+    log("               WGGBot Controller")
+    log("===========================================")
 
 def get_venv_python():
     return os.path.join("python", "win-x64", "wvenv", "Scripts", "python.exe")
@@ -22,7 +20,7 @@ def get_venv_python():
 def pip_cmd(args):
     python = get_venv_python()
     if not os.path.exists(python):
-        print("[!] Virtual environment not found.")
+        log("[!] Virtual environment not found.")
         input("\nPress ENTER...")
         return False
     return subprocess.call([python, "-m", "pip"] + args)
@@ -45,33 +43,89 @@ def bot_running():
         return False
 
 # ============================================================
+# DIRECTORY TREE VIEWER
+# ============================================================
+IGNORE_FOLDERS = {"__pycache__", "downloads", "downloads_win", "python"}
+
+# ANSI colors (Windows terminal supports these)
+BLUE = "\033[94m"
+WHITE = "\033[97m"
+GRAY = "\033[90m"
+RESET = "\033[0m"
+
+def color_name(name, is_dir, ignored):
+    """Returns a colorized name depending on type."""
+    if ignored:
+        return f"{GRAY}{name}{RESET}"
+    if is_dir:
+        return f"{BLUE}{name}{RESET}"
+    return f"{WHITE}{name}{RESET}"
+
+
+def tree(path=".", prefix="", depth=0):
+    """Colorized & depth-aware tree that shows ignored folders but does not recurse into them."""
+    try:
+        entries = sorted(os.listdir(path))
+    except FileNotFoundError:
+        return
+
+    for index, name in enumerate(entries):
+        full = os.path.join(path, name)
+        is_dir = os.path.isdir(full)
+        ignored = name in IGNORE_FOLDERS
+
+        is_last = index == len(entries) - 1
+        connector = "└── " if is_last else "├── "
+
+        # color the name
+        colored = color_name(name, is_dir, ignored)
+
+        # print depth + tree line
+        log(f"[{depth}] {prefix}{connector}{colored}")
+
+        # STOP recursion if ignored or not a folder
+        if ignored or not is_dir:
+            continue
+
+        # recursion into children
+        extension = "    " if is_last else "│   "
+        tree(full, prefix + extension, depth + 1)
+
+
+def print_directory_tree():
+    header()
+    log("[*] Directory Tree:", print_console=True)
+    log(f"[0] {BLUE}app{RESET}", print_console=True)
+    tree("app", depth=0)
+    input("\nPress ENTER...")
+
+
+# ============================================================
 # START BOT — INTERACTIVE (NORMAL) MODE
 # ============================================================
 
 def start_bot_interactive():
-    cls()
     header()
 
     if bot_running():
-        print("[!] Bot is already running (headless mode).")
+        log("[!] Bot is already running (headless mode).")
         input("\nPress ENTER...")
         return
 
     python = get_venv_python()
     if not os.path.exists(python):
-        print("[!] Virtual environment missing.")
+        log("[!] Virtual environment missing.")
         input("\nPress ENTER...")
         return
 
-    print("[*] Launching bot in interactive mode...\n")
-    print("[INFO] Press CTRL+C to stop the bot manually.")
-    print("===========================================\n")
+    log("[*] Launching bot in interactive mode...")
+    log("[INFO] Press CTRL+C to stop the bot manually.")
+    log("===========================================")
 
     try:
-        subprocess.call([python, "app/bot.py"])
+        subprocess.call([python, "-m", "app.bot"])
     except KeyboardInterrupt:
-        print("\n[OK] Bot stopped via CTRL+C")
-
+        log("[OK] Bot stopped via CTRL+C")
     input("\nPress ENTER...")
 
 # ============================================================
@@ -79,37 +133,36 @@ def start_bot_interactive():
 # ============================================================
 
 def start_bot_headless():
-    cls()
     header()
 
     if bot_running():
-        print("[!] Bot is already running.")
+        log("[!] Bot is already running.")
         input("\nPress ENTER...")
         return
 
     python = get_venv_python()
     if not os.path.exists(python):
-        print("[!] Virtual environment missing.")
+        log("[!] Virtual environment missing.")
         input("\nPress ENTER...")
         return
 
-    print("[*] Starting bot headless...")
+    log("[*] Starting bot headless...")
 
     os.makedirs("logs", exist_ok=True)
     log_path = os.path.join("logs", "bot.log")
 
-    with open(log_path, "w") as log:
+    with open(log_path, "w") as logfile:
         process = subprocess.Popen(
             [python, "app/bot.py"],
-            stdout=log,
-            stderr=log,
+            stdout=logfile,
+            stderr=logfile,
             stdin=subprocess.DEVNULL
         )
 
     with open("bot.pid", "w") as f:
         f.write(str(process.pid))
 
-    print(f"[OK] Bot started headless (PID {process.pid})")
+    log(f"[OK] Bot started headless (PID {process.pid})")
     input("\nPress ENTER...")
 
 # ============================================================
@@ -117,18 +170,17 @@ def start_bot_headless():
 # ============================================================
 
 def stop_bot():
-    cls()
     header()
 
     if not bot_running():
-        print("[!] Bot is not running.")
+        log("[!] Bot is not running.")
         input("\nPress ENTER...")
         return
 
     with open("bot.pid", "r") as f:
         pid = int(f.read().strip())
 
-    print(f"[*] Sending graceful shutdown to PID {pid}...\n")
+    log(f"[*] Sending graceful shutdown to PID {pid}...")
 
     try:
         os.kill(pid, signal.SIGINT)
@@ -138,7 +190,7 @@ def stop_bot():
     time.sleep(1)
 
     if bot_running():
-        print("[!] Graceful shutdown failed — sending SIGTERM...")
+        log("[!] Graceful shutdown failed — sending SIGTERM...")
         try:
             os.kill(pid, signal.SIGTERM)
         except:
@@ -146,7 +198,7 @@ def stop_bot():
         time.sleep(0.5)
 
     if bot_running():
-        print("[!] Final fallback — force killing...")
+        log("[!] Final fallback — force killing...")
         try:
             os.kill(pid, signal.SIGKILL)
         except:
@@ -155,7 +207,7 @@ def stop_bot():
     if os.path.exists("bot.pid"):
         os.remove("bot.pid")
 
-    print("[OK] Bot stopped.")
+    log("[OK] Bot stopped.")
     input("\nPress ENTER...")
 
 # ============================================================
@@ -163,36 +215,36 @@ def stop_bot():
 # ============================================================
 
 def check_updates():
-    cls()
     header()
-    print("[*] Checking for updates...\n")
+    log("[*] Checking for updates...")
     os.system("git pull")
-    input("\nDone. Press ENTER...")
+    log("[*] Done.")
+    input("\nPress ENTER...")
 
 # ============================================================
 # OPEN LOGS
 # ============================================================
 
 def open_logs():
-    cls()
     header()
 
     log_file = os.path.join("logs", "bot.log")
 
     if not os.path.exists(log_file):
-        print("[!] No bot.log found.")
+        log("[!] No bot.log found.")
         input("\nPress ENTER...")
         return
 
-    print("========== BOT LOGS ==========\n")
+    log("========== BOT LOGS ==========")
+
     try:
         with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
             data = f.read()
-            print(data if data.strip() else "[log is empty]")
+            log(data if data.strip() else "[log is empty]")
     except Exception as e:
-        print(f"[!] Unable to read logs: {e}")
+        log(f"[!] Unable to read logs: {e}")
 
-    print("\n==============================")
+    log("==============================")
     input("\nPress ENTER...")
 
 # ============================================================
@@ -200,7 +252,6 @@ def open_logs():
 # ============================================================
 
 def install_pip_package():
-    cls()
     header()
     pkg = input("Package name: ").strip()
 
@@ -208,7 +259,7 @@ def install_pip_package():
         input("No package entered. Press ENTER...")
         return
 
-    print(f"\n[*] Installing '{pkg}'...\n")
+    log(f"\n[*] Installing '{pkg}'...")
     pip_cmd(["install", pkg])
     input("\nPress ENTER...")
 
@@ -217,20 +268,19 @@ def install_pip_package():
 # ============================================================
 
 def export_requirements():
-    cls()
     header()
-    print("[*] Exporting pip freeze -> requirements.txt...\n")
+    log("[*] Exporting pip freeze -> requirements.txt...")
 
     python = get_venv_python()
     if not os.path.exists(python):
-        print("[!] Virtual environment missing.")
+        log("[!] Virtual environment missing.")
         input("\nPress ENTER...")
         return
 
     with open("requirements.txt", "w") as f:
         subprocess.call([python, "-m", "pip", "freeze"], stdout=f)
 
-    print("[OK] Requirements exported.")
+    log("[OK] Requirements exported.")
     input("\nPress ENTER...")
 
 # ============================================================
@@ -238,12 +288,11 @@ def export_requirements():
 # ============================================================
 
 def install_bot_requirements():
-    cls()
     header()
-    print("[*] Installing bot requirements.txt...\n")
+    log("[*] Installing bot requirements.txt...")
 
     if not os.path.exists("requirements.txt"):
-        print("[!] No requirements.txt found.")
+        log("[!] No requirements.txt found.")
         input("\nPress ENTER...")
         return
 
@@ -255,14 +304,13 @@ def install_bot_requirements():
 # ============================================================
 
 def install_module_requirements():
-    cls()
     header()
-    print("[*] Installing module dependencies...\n")
+    log("[*] Installing module dependencies...")
 
     base = os.path.join("app", "modules")
 
     if not os.path.exists(base):
-        print("[!] No modules folder found.")
+        log("[!] No modules folder found.")
         input("\nPress ENTER...")
         return
 
@@ -274,13 +322,13 @@ def install_module_requirements():
 
         if os.path.exists(req):
             found = True
-            print(f"[*] Installing: {folder}")
+            log(f"[*] Installing: {folder}")
             pip_cmd(["install", "-r", req])
 
     if not found:
-        print("[!] No module requirements.txt files found.")
+        log("[!] No module requirements.txt files found.")
     else:
-        print("[OK] All module requirements installed.")
+        log("[OK] All module requirements installed.")
 
     input("\nPress ENTER...")
 
@@ -290,20 +338,20 @@ def install_module_requirements():
 
 def main_menu():
     while True:
-        cls()
         header()
 
         running = bot_running()
 
-        print("1) Start Bot (Interactive)")
-        print("2) Start Bot (Headless)")
-        print("3) Stop Bot" if running else "3) Check for Updates")
-        print("4) Open Logs")
-        print("5) Install a Pip Package")
-        print("6) Export Requirements")
-        print("7) Install Bot requirements.txt")
-        print("8) Install Module requirements")
-        print("E) Exit\n")
+        log("1) Start Bot (Interactive)")
+        log("2) Start Bot (Headless)")
+        log("3) Stop Bot" if running else "3) Check for Updates")
+        log("4) Open Logs")
+        log("5) Install a Pip Package")
+        log("6) Export Requirements")
+        log("7) Install Bot requirements.txt")
+        log("8) Install Module requirements")
+        log("9) Print Directory Tree")
+        log("E) Exit")
 
         choice = input("Select an option: ").strip().lower()
 
@@ -334,9 +382,11 @@ def main_menu():
         elif choice == "8":
             install_module_requirements()
 
+        elif choice == "9":
+            print_directory_tree()
+
         elif choice == "e":
-            cls()
-            print("Exiting WGGBot controller...")
+            log("Exiting WGGBot controller...")
             sys.exit(0)
 
         else:

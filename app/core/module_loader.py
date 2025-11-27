@@ -1,49 +1,51 @@
-# core/module_loader.py
-
+# app/core/module_loader.py
 import os
 import importlib
 import traceback
+from .logging import log, sublog
 
 
 def load_all_modules(bot):
-    """
-    WGGBot Dynamic Module Loader
-    Loads ./modules/<name>/
-
-    Each module may define:
-       - init(bot)
-       - register(bot)
-       - setup(bot)
-    """
 
     BASE_DIR = os.path.abspath(
         os.path.join(os.path.dirname(__file__), "..", "modules")
     )
 
-    print("\n===========================================")
-    print("         Loading WGGBot Modules")
-    print("===========================================\n")
+    log("===========================================")
+    log("         Loading WGGBot Modules")
+    log("===========================================")
 
     if not os.path.isdir(BASE_DIR):
-        print(f"[ERR] Missing modules folder: {BASE_DIR}")
+        log(f"[ERR] Missing modules folder: {BASE_DIR}")
         return
 
-    module_names = sorted(os.listdir(BASE_DIR))
-    total_commands = 0  # <── count registered slash commands
+    # list dirs except pycache
+    entries = [
+        name for name in sorted(os.listdir(BASE_DIR))
+        if name != "__pycache__"
+    ]
 
-    for name in module_names:
+    total_commands = 0
+
+    for name in entries:
         module_dir = os.path.join(BASE_DIR, name)
+
+        # non-directories still get listed
         if not os.path.isdir(module_dir):
+            log(f"[{name}] Skipped not a directory")
             continue
 
-        if not os.path.isfile(os.path.join(module_dir, "__init__.py")):
-            print(f"[SKIP] {name} — No __init__.py")
+        # must have __init__.py
+        init_path = os.path.join(module_dir, "__init__.py")
+        if not os.path.isfile(init_path):
+            log(f"[{name}] Skipped (no __init__.py)")
+            log("")
             continue
 
-        print(f"[MODULE] {name}")
+        # module begins loading
+        log(f"[{name}]")
 
-        # Import targets
-        module_root = f"modules.{name}"
+        module_root = f"app.modules.{name}"
 
         expected_files = [
             module_root,
@@ -51,64 +53,63 @@ def load_all_modules(bot):
             f"{module_root}.{name}_commands",
         ]
 
-        # Process each file
         for import_target in expected_files:
 
+            # ------------------------
+            # IMPORT MODULE
+            # ------------------------
             try:
                 mod = importlib.import_module(import_target)
             except ModuleNotFoundError:
+                # Missing file is NOT an error — just skip
                 continue
             except Exception as e:
-                print(f"   [ERR] Failed to import {import_target}: {e}")
+                log(f"   [ERR] Failed to import {import_target}: {e}")
                 traceback.print_exc()
                 continue
 
-            # -----------------------------
-            # init()
-            # -----------------------------
+            # ------------------------
+            # INIT
+            # ------------------------
             if hasattr(mod, "init"):
                 try:
+                    sublog(f"[{name}] init()")
                     mod.init(bot)
-                    print(f"   [OK] init()    — {import_target}")
                 except Exception:
-                    print(f"   [ERR] init() failed — {import_target}")
+                    sublog(f"[{name}] init() failed")
                     traceback.print_exc()
 
-            # -----------------------------
-            # register()  ← count commands
-            # -----------------------------
+            # ------------------------
+            # REGISTER
+            # ------------------------
             if hasattr(mod, "register"):
                 try:
                     before = len(bot.tree.get_commands())
                     mod.register(bot)
                     after = len(bot.tree.get_commands())
-
                     added = after - before
                     total_commands += added
-
-                    print(f"   [OK] register() — {import_target}  ({added} commands)")
+                    sublog(f"[{name}] register() ({added} commands)")
                 except Exception:
-                    print(f"   [ERR] register() failed — {import_target}")
+                    sublog(f"[{name}] register() failed")
                     traceback.print_exc()
 
-            # -----------------------------
-            # setup()
-            # -----------------------------
+            # ------------------------
+            # SETUP
+            # ------------------------
             if hasattr(mod, "setup"):
                 try:
                     mod.setup(bot)
-                    print(f"   [OK] setup()   — {import_target}")
+                    sublog(f"[{name}] setup()")
                 except Exception:
-                    print(f"   [ERR] setup() failed — {import_target}")
+                    sublog(f"[{name}] setup() failed")
                     traceback.print_exc()
 
-        print()
+        sublog(f"[{name}] Initialized!")
+        log("")
 
-    # ---------------------------------------
-    # 🎉 Print total commands loaded
-    # ---------------------------------------
-    print(f"[INFO] Total slash commands loaded: {total_commands}\n")
-
-    print("===========================================")
-    print("        WGGBot Modules Loaded")
-    print("===========================================\n")
+    # done
+    log(f"[INFO] Total slash commands loaded: {total_commands}")
+    log("===========================================")
+    log("        WGGBot Modules Loaded")
+    log("===========================================")

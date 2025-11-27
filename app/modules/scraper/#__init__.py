@@ -1,12 +1,12 @@
-# modules/scraper/__init__.py
+# app/modules/scraper/__init__.py
 
 import os
 import configparser
 from datetime import datetime
+from ...core.logging import log
 
 SETTINGS_PATH = "settings.ini"
-LOG_DIR = "logs"
-LOG_FILE = os.path.join(LOG_DIR, "module_scraper.log")
+MODULE_NAME = __name__.split(".")[-1]
 
 # Default values to inject if missing
 DEFAULTS = {
@@ -23,15 +23,6 @@ DEFAULTS = {
     "concurrent_images_per_gallery": "50",
     "concurrent_videos_per_gallery": "10",
 }
-
-# -----------------------------------------------------
-# Logging
-# -----------------------------------------------------
-def log(msg: str):
-    os.makedirs(LOG_DIR, exist_ok=True)
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(LOG_FILE, "a", encoding="utf-8") as f:
-        f.write(f"[{ts}] {msg}\n")
 
 # -----------------------------------------------------
 # Ensure settings.ini has scraper defaults
@@ -70,6 +61,4 @@ def ensure_settings():
 # init(bot) — called by module_loader
 # -----------------------------------------------------
 def init(bot):
-    log("Initializing Scraper module...")
     ensure_settings()
-    log("Scraper module initialization complete.")

@@ -1,69 +1,65 @@
-# modules/ollama/__init__.py
+# app/modules/ollama/__init__.py
 
-import os
+import requests
+from app.core.logging import log, sublog
+from app.core.config import ensure_settings, cfg
 import configparser
-from datetime import datetime
+import os
 
-SETTINGS_PATH = "settings.ini"
-LOG_DIR = "logs"
-LOG_FILE = os.path.join(LOG_DIR, "module_ollama.log")
 
-# Default values to inject if missing
+# Default settings for the Ollama module
 DEFAULTS = {
     "ollama_host": "http://localhost:11434",
-    "ollama_model": "llama3.1",
-    "enabled": "true"
+    "default_model": "llama3.1",
+    "available_models": ""          # populated dynamically on init
 }
 
 
-# -----------------------------------------------------
-# Logging
-# -----------------------------------------------------
-def log(msg: str):
-    os.makedirs(LOG_DIR, exist_ok=True)
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(LOG_FILE, "a", encoding="utf-8") as f:
-        f.write(f"[{ts}] {msg}\n")
+SETTINGS_PATH = "settings.ini"
 
 
-# -----------------------------------------------------
-# Ensure settings.ini has ollama defaults
-# -----------------------------------------------------
-def ensure_settings():
-    config = configparser.ConfigParser()
-
-    if not os.path.exists(SETTINGS_PATH):
-        log("settings.ini not found — skipping Ollama initialization.")
-        return None
-
-    config.read(SETTINGS_PATH)
-
-    # Ensure section exists
-    if "ollama" not in config:
-        config["ollama"] = {}
-        log("Added missing [ollama] section.")
-
-    # Insert defaults when missing
-    updated = False
-    for key, value in DEFAULTS.items():
-        if key not in config["ollama"]:
-            config["ollama"][key] = value
-            updated = True
-            log(f"Inserted default key: {key}={value}")
-
-    # Save changes
-    if updated:
-        with open(SETTINGS_PATH, "w") as f:
-            config.write(f)
-        log("Saved updated ollama settings to settings.ini.")
-
-    return config
-
-
-# -----------------------------------------------------
-# init(bot) — called by module_loader
-# -----------------------------------------------------
 def init(bot):
-    log("Initializing Ollama module...")
-    ensure_settings()
-    log("Ollama module initialization complete.")
+    # Ensure defaults exist
+    ensure_settings("ollama", DEFAULTS)
+
+    # Load host + enabled
+    host = cfg("ollama", "ollama_host", "http://localhost:11434").rstrip("/")
+
+    # Ping server
+    ping_url = f"{host}/api/tags"
+    sublog(f"[ping] Contacting Ollama at {host} ...")
+
+    try:
+        r = requests.get(ping_url, timeout=3)
+
+        if r.status_code != 200:
+            sublog(f"[error] Ollama responded with HTTP {r.status_code}")
+            return
+
+        sublog("[success] Ollama server reachable.")
+
+        # Parse available models
+        data = r.json()
+        models = [m.get("name", "").strip() for m in data.get("models", []) if m.get("name")]
+
+        if not models:
+            sublog("[warning] No models returned.")
+
+        # -----------------------------------------------------
+        # Store available models into settings.ini
+        # -----------------------------------------------------
+        if os.path.exists(SETTINGS_PATH):
+            cfgfile = configparser.ConfigParser()
+            cfgfile.read(SETTINGS_PATH)
+
+            cfgfile["ollama"]["available_models"] = ",".join(models)
+
+            with open(SETTINGS_PATH, "w") as f:
+                cfgfile.write(f)
+
+            sublog("[saved] Updated available_models in settings.ini")
+
+    except Exception as e:
+        sublog(f"[error] Ollama not reachable: {e}")
+        return
+
