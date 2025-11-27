@@ -16,15 +16,18 @@ DEFAULTS = {
 
 
 SETTINGS_PATH = "settings.ini"
+host = ""
+default_model = ""
 
 
 def init(bot):
+    global host, default_model
     # Ensure defaults exist
     ensure_settings("ollama", DEFAULTS)
 
     # Load host + enabled
     host = cfg("ollama", "ollama_host", "http://localhost:11434").rstrip("/")
-
+    default_model = cfg("ollama", "default_model", "llama3.1")
     # Ping server
     ping_url = f"{host}/api/tags"
     sublog(f"[ping] Contacting Ollama at {host} ...")

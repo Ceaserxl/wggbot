@@ -2,14 +2,14 @@
 import aiohttp
 from app.core.logging import log, sublog
 from app.core.config import cfg
-
+from . import host, default_model
 # ---------------------------------------------------------
 # Load Ollama settings (fresh every call)
 # ---------------------------------------------------------
 def load_settings():
     return {
-        "host": cfg("ollama", "ollama_host", "http://localhost:11434").rstrip("/"),
-        "model": cfg("ollama", "default_model", "llama3.1"),
+        "host": host,
+        "model": default_model,
     }
 
 # ---------------------------------------------------------
