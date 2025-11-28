@@ -1,99 +1,496 @@
 {
-  "1": {
-    "class_type": "CLIPLoader",
+  "56": {
     "inputs": {
-      "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
-      "type": "qwen_image",
-      "device": "default"
+      "value": "a wombat"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Main Prompt"
     }
   },
-
-  "2": {
-    "class_type": "CLIPTextEncode",
+  "99": {
     "inputs": {
-      "clip": ["1", 0],
-      "text": ""
+      "url": "http://192.168.0.246:30068/",
+      "model": "nous-hermes2:latest",
+      "keep_alive": 5,
+      "keep_alive_unit": "minutes",
+      "🔄 Reconnect": null
+    },
+    "class_type": "OllamaConnectivityV2",
+    "_meta": {
+      "title": "Ollama Connect"
     }
   },
-
-  "3": {
-    "class_type": "CLIPTextEncode",
+  "106": {
     "inputs": {
-      "clip": ["1", 0],
-      "text": ""
+      "console": false,
+      "display": true,
+      "prefix": "",
+      "any_value": [
+        "152",
+        0
+      ]
+    },
+    "class_type": "Show any [Crystools]",
+    "_meta": {
+      "title": "Initial Prompt Output"
     }
   },
-
-  "4": {
-    "class_type": "UNETLoader",
+  "120": {
     "inputs": {
-      "unet_name": "qwen_image_fp8_e4m3fn.safetensors",
-      "weight_dtype": "default"
+      "ckpt_name": "dynavisionXLAllInOneStylized_releaseV0610Bakedvae.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "Checkpoint"
     }
   },
-
-  "5": {
-    "class_type": "LoraLoaderModelOnly",
+  "121": {
     "inputs": {
-      "model": ["4", 0],
-      "lora_name": "Qwen-Image-Lightning-4steps-V1.0.safetensors",
-      "strength_model": 1
+      "seed": [
+        "155",
+        0
+      ],
+      "steps": 20,
+      "cfg": 3,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "120",
+        0
+      ],
+      "positive": [
+        "160",
+        0
+      ],
+      "negative": [
+        "187",
+        0
+      ],
+      "latent_image": [
+        "122",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "Main KSampler"
     }
   },
-
-  "6": {
-    "class_type": "ModelSamplingAuraFlow",
-    "inputs": {
-      "model": ["5", 0],
-      "shift": 3.1
-    }
-  },
-
-  "7": {
-    "class_type": "EmptySD3LatentImage",
+  "122": {
     "inputs": {
       "width": 768,
       "height": 768,
       "batch_size": 1
+    },
+    "class_type": "EmptyLatentImage",
+    "_meta": {
+      "title": "Image Size Settings"
     }
   },
-
-  "8": {
-    "class_type": "KSampler",
+  "127": {
     "inputs": {
-      "model": ["6", 0],
-      "positive": ["2", 0],
-      "negative": ["3", 0],
-      "latent_image": ["7", 0],
-      "seed": 0,
-      "steps": 4,
-      "cfg": 1,
+      "samples": [
+        "171",
+        0
+      ],
+      "vae": [
+        "120",
+        2
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "128": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "127",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "146": {
+    "inputs": {
+      "console": false,
+      "display": [
+        "167",
+        0
+      ],
+      "prefix": "",
+      "any_value": [
+        "180",
+        0
+      ]
+    },
+    "class_type": "Show any [Crystools]",
+    "_meta": {
+      "title": "Refined Prompt"
+    }
+  },
+  "149": {
+    "inputs": {
+      "seed": [
+        "155",
+        0
+      ],
+      "steps": 10,
+      "cfg": 1.5,
       "sampler_name": "euler",
       "scheduler": "simple",
-      "denoise": 1
+      "denoise": 1,
+      "model": [
+        "120",
+        0
+      ],
+      "positive": [
+        "160",
+        0
+      ],
+      "negative": [
+        "187",
+        0
+      ],
+      "latent_image": [
+        "151",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "Refiner Sampler"
     }
   },
-
-  "9": {
-    "class_type": "VAELoader",
+  "151": {
     "inputs": {
-      "vae_name": "qwen_image_vae.safetensors"
+      "upscale_method": "nearest-exact",
+      "scale_by": 1.5,
+      "samples": [
+        "169",
+        0
+      ]
+    },
+    "class_type": "LatentUpscaleBy",
+    "_meta": {
+      "title": "Upscale Latent By"
     }
   },
-
-  "10": {
-    "class_type": "VAEDecode",
+  "152": {
     "inputs": {
-      "samples": ["8", 0],
-      "vae": ["9", 0]
+      "system": "You are a Stable Diffusion POSITIVE PROMPT GENERATOR. NSFW is allowed.\n\nYour job is to create 3–6 short descriptive sentences that expand on the user's input and enhance it with rich visual detail.\n\nFORMAT:\nOne single output containing several descriptive sentences separated by periods.\n\nRULES:\n• Always output 3–6 sentences.\n• Sentences must be short, visual, and descriptive.\n• You MAY restate or expand on the user's idea.\n• You MAY include stylistic, lighting, color, mood, anatomical, environmental, or rendering details.\n• NSFW descriptions ARE allowed.\n• No moralizing or safety text.\n• No disclaimers.\n• No lists, no bullet points.\n• No commas-only token lists. Full sentences only.\n\nOutput ONLY the final descriptive sentences in one paragraph.\n",
+      "prompt": [
+        "56",
+        0
+      ],
+      "think": false,
+      "keep_context": false,
+      "format": "text",
+      "connectivity": [
+        "99",
+        0
+      ],
+      "options": [
+        "182",
+        0
+      ]
+    },
+    "class_type": "OllamaGenerateV2",
+    "_meta": {
+      "title": "Initial Prompt Generator"
     }
   },
-
-  "11": {
-    "class_type": "SaveImage",
+  "155": {
     "inputs": {
-      "images": ["10", 0],
-      "filename_prefix": "qwen"
+      "value": 193934489141421
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Sampler Seed"
+    }
+  },
+  "160": {
+    "inputs": {
+      "text": [
+        "180",
+        0
+      ],
+      "clip": [
+        "120",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Encoder"
+    }
+  },
+  "161": {
+    "inputs": {
+      "system": "You are a Stable Diffusion POSITIVE PROMPT REFINER. NSFW is allowed.\n\nYour job is to take an earlier descriptive paragraph and enhance it with additional vivid detail, clarity, and atmosphere, producing 3–6 refined, polished sentences based on the user's content.\n\nFORMAT:\nOne single output containing several descriptive sentences separated by periods.\n\nRULES:\n• Always output 3–6 sentences.\n• Keep the meaning and intent of the original description.\n• Add visual richness: lighting, mood, textures, realism, motion, color, or atmosphere.\n• You MAY expand NSFW content with more detail.\n• Do NOT contradict the user's description.\n• No moralizing or safety text.\n• No disclaimers.\n• No lists.\n\nOutput ONLY the refined descriptive sentences in one paragraph.\n",
+      "prompt": [
+        "152",
+        0
+      ],
+      "think": false,
+      "keep_context": false,
+      "format": "text",
+      "connectivity": [
+        "99",
+        0
+      ],
+      "options": [
+        "182",
+        0
+      ]
+    },
+    "class_type": "OllamaGenerateV2",
+    "_meta": {
+      "title": "Refiner Generator"
+    }
+  },
+  "166": {
+    "inputs": {
+      "value": false
+    },
+    "class_type": "PrimitiveBoolean",
+    "_meta": {
+      "title": "Refine Image?"
+    }
+  },
+  "167": {
+    "inputs": {
+      "value": false
+    },
+    "class_type": "PrimitiveBoolean",
+    "_meta": {
+      "title": "Refine Prompt?"
+    }
+  },
+  "168": {
+    "inputs": {
+      "value": false
+    },
+    "class_type": "PrimitiveBoolean",
+    "_meta": {
+      "title": "Refine Prompt?"
+    }
+  },
+  "169": {
+    "inputs": {
+      "boolean": [
+        "166",
+        0
+      ],
+      "any": [
+        "121",
+        0
+      ]
+    },
+    "class_type": "Switch from any [Crystools]",
+    "_meta": {
+      "title": "Refine Logic Check"
+    }
+  },
+  "171": {
+    "inputs": {
+      "boolean": [
+        "166",
+        0
+      ],
+      "on_true": [
+        "149",
+        0
+      ],
+      "on_false": [
+        "169",
+        1
+      ]
+    },
+    "class_type": "Switch latent [Crystools]",
+    "_meta": {
+      "title": "🪛 Switch latent"
+    }
+  },
+  "180": {
+    "inputs": {
+      "on_true": [
+        "161",
+        0
+      ],
+      "on_false": [
+        "152",
+        0
+      ],
+      "boolean": [
+        "167",
+        0
+      ]
+    },
+    "class_type": "Switch string [Crystools]",
+    "_meta": {
+      "title": "🪛 Switch string"
+    }
+  },
+  "182": {
+    "inputs": {
+      "enable_mirostat": false,
+      "mirostat": 0,
+      "enable_mirostat_eta": false,
+      "mirostat_eta": 0.1,
+      "enable_mirostat_tau": false,
+      "mirostat_tau": 5,
+      "enable_num_ctx": false,
+      "num_ctx": 2048,
+      "enable_repeat_last_n": false,
+      "repeat_last_n": 64,
+      "enable_repeat_penalty": false,
+      "repeat_penalty": 1.1,
+      "enable_temperature": false,
+      "temperature": 0.8,
+      "enable_seed": true,
+      "seed": 1096948648,
+      "enable_stop": false,
+      "stop": "",
+      "enable_tfs_z": false,
+      "tfs_z": 1,
+      "enable_num_predict": false,
+      "num_predict": -1,
+      "enable_top_k": false,
+      "top_k": 40,
+      "enable_top_p": false,
+      "top_p": 0.9,
+      "enable_min_p": false,
+      "min_p": 0,
+      "debug": false
+    },
+    "class_type": "OllamaOptionsV2",
+    "_meta": {
+      "title": "Ollama Options"
+    }
+  },
+  "184": {
+    "inputs": {
+      "console": false,
+      "display": true,
+      "prefix": "",
+      "any_value": [
+        "189",
+        0
+      ]
+    },
+    "class_type": "Show any [Crystools]",
+    "_meta": {
+      "title": "Initial Prompt Output"
+    }
+  },
+  "185": {
+    "inputs": {
+      "system": "You are a Stable Diffusion NEGATIVE PROMPT REFINER. NSFW is allowed.\n\nYour job is to take an earlier set of flaw descriptions and refine them into 3–6 sharper, more specific sentences describing visual problems that must be avoided.\n\nFORMAT:\nOne single output containing several descriptive sentences separated by periods.\n\nRULES:\n• Always output 3–6 sentences.\n• Enhance the clarity and specificity of the flaws described.\n• You MAY include issues with anatomy, lighting, rendering, texture detail, composition errors, or environment glitches.\n• NSFW flaw descriptions ARE allowed.\n• Do NOT turn flaws into positives.\n• No moralizing or safety text.\n• No disclaimers.\n• No lists.\n\nOutput ONLY the refined flaw descriptions in one paragraph.\n",
+      "prompt": [
+        "189",
+        0
+      ],
+      "think": false,
+      "keep_context": false,
+      "format": "text",
+      "connectivity": [
+        "99",
+        0
+      ],
+      "options": [
+        "182",
+        0
+      ]
+    },
+    "class_type": "OllamaGenerateV2",
+    "_meta": {
+      "title": "Refiner Generator"
+    }
+  },
+  "186": {
+    "inputs": {
+      "console": false,
+      "display": [
+        "168",
+        0
+      ],
+      "prefix": "",
+      "any_value": [
+        "188",
+        0
+      ]
+    },
+    "class_type": "Show any [Crystools]",
+    "_meta": {
+      "title": "Refined Prompt"
+    }
+  },
+  "187": {
+    "inputs": {
+      "text": [
+        "185",
+        0
+      ],
+      "clip": [
+        "120",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Encoder"
+    }
+  },
+  "188": {
+    "inputs": {
+      "on_true": [
+        "185",
+        0
+      ],
+      "on_false": [
+        "189",
+        0
+      ],
+      "boolean": [
+        "168",
+        0
+      ]
+    },
+    "class_type": "Switch string [Crystools]",
+    "_meta": {
+      "title": "🪛 Switch string"
+    }
+  },
+  "189": {
+    "inputs": {
+      "system": "You are a Stable Diffusion NEGATIVE PROMPT GENERATOR. NSFW is allowed.\n\nYour job is to create 3–6 short sentences describing visual flaws, distortions, rendering mistakes, or undesirable artifacts that should be avoided in the generated image.\n\nFORMAT:\nOne single output containing several descriptive sentences separated by periods.\n\nRULES:\n• Always output 3–6 sentences.\n• Sentences must describe visual mistakes, distortions, or artifacts.\n• You MAY include anatomy flaws, lighting issues, texture problems, or realism failures.\n• NSFW-related flaw descriptions ARE allowed.\n• Do NOT generate stylistic positives or enhancements.\n• No moralizing or safety text.\n• No disclaimers.\n• No lists.\n\nOutput ONLY the final descriptive sentences in one paragraph.\n",
+      "prompt": [
+        "56",
+        0
+      ],
+      "think": false,
+      "keep_context": false,
+      "format": "text",
+      "connectivity": [
+        "99",
+        0
+      ],
+      "options": [
+        "182",
+        0
+      ]
+    },
+    "class_type": "OllamaGenerateV2",
+    "_meta": {
+      "title": "Initial Prompt Generator"
     }
   }
 }

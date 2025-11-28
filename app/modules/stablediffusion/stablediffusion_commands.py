@@ -17,24 +17,31 @@ def register(bot):
     # ==========================================================
     @bot.tree.command(
         name="imagine",
-        description="Generate an image using Stable Diffusion (512x512)."
+        description="Generate an image using the Stable Diffusion backend."
+    )
+    @app_commands.describe(
+        prompt="Describe what you want the AI to generate."
     )
     async def imagine_cmd(
         interaction: discord.Interaction,
         prompt: str
     ):
-
-        # Block DMs just like your music commands
+        # Prevent DM usage (same behavior as other modules)
         if isinstance(interaction.channel, discord.DMChannel):
             return await interaction.response.send_message(
                 "❌ This command cannot be used in DMs.",
                 ephemeral=True
             )
 
+        # Initial defer
         await interaction.response.defer()
+
+        # Placeholder message
         msg = await interaction.followup.send("🖼️ Generating image...")
 
+        # Try SD pipeline
         try:
             await imagine_command(interaction, prompt)
+
         except Exception as e:
             await msg.edit(content=f"❌ Error: {e}")
