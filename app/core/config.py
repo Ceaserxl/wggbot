@@ -1,10 +1,10 @@
-# app/core/config.py
+# core/config.py
 
 import os
 import configparser
 from .logging import log, sublog
 
-BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 INI_PATH = os.path.join(BASE, "settings.ini")
 
 config = configparser.ConfigParser()

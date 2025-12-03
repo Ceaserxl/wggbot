@@ -1,4 +1,4 @@
-# app/core/logging.py
+# core/logging.py
 import os
 import inspect
 from datetime import datetime

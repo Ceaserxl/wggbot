@@ -1,53 +1,16 @@
 services:
   wggbot:
     container_name: wggbot
-    image: ubuntu:22.04
+    build: .
     working_dir: /app
+    volumes:
+      - ./:/app
     environment:
       - LANG=en_US.UTF-8
       - LC_ALL=en_US.UTF-8
-    volumes:
-      - ./:/app
     command: >
       bash -c "
-        echo '🔧 Restoring Ubuntu apt sources...' &&
-        echo 'deb http://archive.ubuntu.com/ubuntu jammy main universe' > /etc/apt/sources.list &&
-        echo 'deb http://archive.ubuntu.com/ubuntu jammy-updates main universe' >> /etc/apt/sources.list &&
-        echo 'deb http://archive.ubuntu.com/ubuntu jammy-security main universe' >> /etc/apt/sources.list &&
-
-        echo '📦 Updating apt...' &&
-        apt-get update -y &&
-
-        echo '🌍 Installing locales + base deps...' &&
-        apt-get install -y locales ca-certificates xz-utils ffmpeg curl wget gnupg screen &&
-
-        echo '🌍 Generating en_US.UTF-8 locale...' &&
-        sed -i 's/^# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen &&
-        locale-gen en_US.UTF-8 &&
-        update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 &&
-
-        echo '📦 Updating CA certificates...' &&
-        update-ca-certificates &&
-
-        echo '🔥 Extracting portable python...' &&
-        mkdir -p /app/resources/python313/extracted &&
-        tar -xf /app/resources/python313/cpython-3.13.7linux.tar.xz -C /app/resources/python313 &&
-
-        echo '🐍 Creating venv using portable python...' &&
-        /app/resources/python313/python/bin/python3 -m venv /app/venv &&
-
-        echo '📦 Activating venv and installing requirements + Playwright...' &&
-        source /app/venv/bin/activate &&
-        pip install --upgrade pip &&
-        pip install -r requirements.txt &&
-
-        echo '📦 Installing Playwright Linux deps...' &&
-        playwright install-deps &&
-
-        echo '🌐 Installing Playwright browsers...' &&
-        playwright install &&
-        
         echo '🚀 Starting bot...' &&
-        exec /app/venv/bin/python /app/main.py
+        tail -f /dev/null
       "
     restart: unless-stopped
