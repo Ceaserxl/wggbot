@@ -1,7 +1,7 @@
-# app/modules/musicplayer/__init__.py
+# /app/modules/musicplayer/__init__.py
 
-from app.core.logging import log, sublog
-from app.core.config import ensure_settings
+from core.logging import log, sublog
+from core.config import ensure_settings
 
 
 # Default settings for the music player module

@@ -1,8 +1,8 @@
-# app/modules/ollama/__init__.py
+# /app/modules/ollama/__init__.py
 
 import requests
-from app.core.logging import log, sublog
-from app.core.config import ensure_settings, cfg
+from core.logging import log, sublog
+from core.config import ensure_settings, cfg
 import configparser
 import os
 
@@ -10,7 +10,7 @@ import os
 # Default settings for the Ollama module
 DEFAULTS = {
     "ollama_host": "http://localhost:11434",
-    "default_model": "llama3.1",
+    "default_model": "llama3.1:latest",
     "available_models": ""          # populated dynamically on init
 }
 
@@ -27,7 +27,7 @@ def init(bot):
 
     # Load host + enabled
     host = cfg("ollama", "ollama_host", "http://localhost:11434").rstrip("/")
-    default_model = cfg("ollama", "default_model", "llama3.1")
+    default_model = cfg("ollama", "default_model", "llama3.1:latest")
     # Ping server
     ping_url = f"{host}/api/tags"
     sublog(f"[ping] Contacting Ollama at {host} ...")

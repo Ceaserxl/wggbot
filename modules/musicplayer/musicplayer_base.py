@@ -1,4 +1,4 @@
-# app/modules/musicplayer/musicplayer_base.py
+# /app/modules/musicplayer/musicplayer_base.py
 
 import asyncio
 import re
@@ -9,7 +9,7 @@ import discord
 import yt_dlp as youtube_dl
 from pathlib import Path
 
-from app.core.logging import log, sublog
+from core.logging import log, sublog
 
 
 # ============================================================

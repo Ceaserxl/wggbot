@@ -1,4 +1,4 @@
-# app/core/module_loader.py
+# /app/core/module_loader.py
 import os
 import importlib
 import traceback
@@ -45,7 +45,7 @@ def load_all_modules(bot):
         # module begins loading
         log(f"[{name}]")
 
-        module_root = f"app.modules.{name}"
+        module_root = f"modules.{name}"
 
         expected_files = [
             module_root,

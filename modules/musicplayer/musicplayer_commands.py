@@ -1,16 +1,16 @@
-# modules/musicplayer/musicplayer_commands.py
+# /app/modules/musicplayer/musicplayer_commands.py
 
 import discord
 from discord import app_commands
 
-from .musicplayer_base import (
+from musicplayer_base import (
     handle_play,
     handle_playlist,
     handle_skip,
     handle_queue,
     handle_disconnect,
 )
-
+print("WHAT THE FUCK")
 # -------------------------------------------------------------
 # register(bot)
 # Called automatically by module_loader after init()

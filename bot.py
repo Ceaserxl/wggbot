@@ -2,9 +2,9 @@
 import os
 import discord
 from discord.ext import commands
-from app.core.config import cfg, cfg_bool
-from app.core.module_loader import load_all_modules
-from app.core.logging import log
+from core.config import cfg, cfg_bool
+from core.module_loader import load_all_modules
+from core.logging import log
 # ---------------------------------------------------------
 # Bot Setup
 # ---------------------------------------------------------

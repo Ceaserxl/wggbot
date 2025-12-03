@@ -1,6 +1,6 @@
-# app/modules/stablediffusion/__init__.py
-from app.core.config import ensure_settings
-from app.core.logging import sublog
+# /app/modules/stablediffusion/__init__.py
+from core.config import ensure_settings
+from core.logging import sublog
 
 # ============================================================
 # SETTINGS

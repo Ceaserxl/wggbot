@@ -1,7 +1,7 @@
-# app/modules/ollama/ollama_base.py
+# /app/modules/ollama/ollama_base.py
 import aiohttp
-from app.core.logging import log, sublog
-from app.core.config import cfg
+from core.logging import log, sublog
+from core.config import cfg
 from . import host, default_model
 # ---------------------------------------------------------
 # Load Ollama settings (fresh every call)
@@ -37,7 +37,7 @@ async def ask_ollama(prompt: str, model: str = None) -> str:
                     "prompt": prompt,
                     "stream": False
                 },
-                timeout=15
+                timeout=30
             )
 
             if response.status != 200:

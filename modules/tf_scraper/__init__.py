@@ -1,4 +1,4 @@
-# app/modules/scraper/__init__.py
+# /app/modules/scraper/__init__.py
 
 # ============================================================
 # DEFAULT SETTINGS (used by ensure_settings)
@@ -29,8 +29,8 @@ settings = {}
 # MODULE INIT — ONLY RUNS WHEN MODULE LOADER CALLS init(bot)
 # ============================================================
 def init(bot):
-    from app.core.config import ensure_settings, cfg
-    from app.core.logging import log, sublog
+    from core.config import ensure_settings, cfg
+    from core.logging import log, sublog
     global settings
     # Inject defaults into settings.ini if missing
     ensure_settings("scraper", DEFAULTS)

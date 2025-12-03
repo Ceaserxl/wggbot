@@ -1,9 +1,9 @@
-# app/modules/ollama/ollama_commands.py
+# /app/modules/ollama/ollama_commands.py
 
 import discord
 from discord import app_commands
 
-from app.core.config import cfg
+from core.config import cfg
 from .ollama_base import ask_ollama
 
 

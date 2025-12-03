@@ -1,4 +1,4 @@
-# modules/stablediffusion/stablediffusion_commands.py
+# /app/modules/stablediffusion/stablediffusion_commands.py
 
 import discord
 from discord import app_commands

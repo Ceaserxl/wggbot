@@ -1,4 +1,4 @@
-# app/modules/stablediffusion/stablediffusion_base.py
+# /app/modules/stablediffusion/stablediffusion_base.py
 
 import os
 import io
@@ -9,8 +9,8 @@ import requests
 import discord
 import random
 
-from app.core.logging import log
-from app.core.config import cfg
+from core.logging import log
+from core.config import cfg
 
 
 # ============================================================

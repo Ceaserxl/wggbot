@@ -1,4 +1,4 @@
-# core/config.py
+# /app/core/config.py
 
 import os
 import configparser
