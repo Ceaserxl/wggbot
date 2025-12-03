@@ -9,8 +9,8 @@ from urllib.parse import urlparse
 from pathlib import Path
 from tqdm import tqdm
 
-from scraper.common.common import print_banner, launch_chromium, safe_print
-import scraper.common.settings as settings
+from tf_scraper.common.common import print_banner, launch_chromium, safe_print
+import tf_scraper.common.settings as settings
 
 from .download_file import download_file
 from .video_resolver import resolve_video_page
@@ -27,7 +27,7 @@ from ..common.s3 import (
 # ============================================================
 #  INTERWOVEN MODE
 # ============================================================
-INTERWOVEN = True
+INTERWOVEN = False
 
 
 # ============================================================

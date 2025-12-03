@@ -7,7 +7,7 @@ import re
 import base64
 from urllib.parse import urlparse, parse_qs
 
-from scraper.common.common import decode_file_param
+from tf_scraper.common.common import decode_file_param
 
 VIDEO_EXT_PATTERN = (
     r"\.(mp4|webm|mkv|mov|avi|flv|m4v|wmv|ts|mpeg|mpg)([/?#]|$)"

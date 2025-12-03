@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
-from scraper.common.common import BASE_DOMAIN
+from tf_scraper.common.common import BASE_DOMAIN
 
 # ============================================================
 #  DEBUG

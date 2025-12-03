@@ -19,7 +19,7 @@ if __package__ is None or __package__ == "":
     SCRAPER_ROOT = THIS_FILE.parent
     PACKAGE_ROOT = SCRAPER_ROOT.parent
     sys.path.insert(0, str(PACKAGE_ROOT))
-    __package__ = "scraper"
+    __package__ = "tf_scraper"
 
 # ------------------------------------------------------------
 #  PRE-RUN: wipe all *_debug.txt logs
@@ -46,8 +46,8 @@ from .phase2.extract_images import extract_images_from_boxes
 from .phase2.extract_videos import extract_videos_from_boxes
 from .phase3.download import phase3_download
 
-import scraper.common.settings as settings
-from scraper.common.settings import load_global_defaults
+import tf_scraper.common.settings as settings
+from tf_scraper.common.settings import load_global_defaults
 from .common import cache_db
 
 # ============================================================

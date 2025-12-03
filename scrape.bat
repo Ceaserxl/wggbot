@@ -5,4 +5,4 @@ setlocal
 call python\win-x64\wvenv\Scripts\activate.bat
 
 :: Run scraper (relative)
-python app\modules\scraper\scraper_base.py %*
+python app\modules\tf_scraper\tf_scraper_base.py %*

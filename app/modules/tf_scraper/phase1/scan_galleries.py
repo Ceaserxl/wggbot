@@ -9,14 +9,14 @@ from urllib.parse import urlparse
 from tqdm import tqdm
 from pathlib import Path
 
-from scraper.common import cache_db
-from scraper.common.common import (
+from tf_scraper.common import cache_db
+from tf_scraper.common.common import (
     safe_print,
     print_banner,
     launch_chromium,
     stop_event
 )
-import scraper.common.settings as settings
+import tf_scraper.common.settings as settings
 
 
 # ============================================================

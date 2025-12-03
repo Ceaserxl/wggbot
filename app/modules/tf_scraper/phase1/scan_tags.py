@@ -10,9 +10,9 @@ from urllib.parse import urljoin
 from tqdm import tqdm
 from pathlib import Path
 
-from scraper.common import cache_db
-from scraper.common.common import BASE_DOMAIN, BASE_URL, safe_print
-import scraper.common.settings as settings
+from tf_scraper.common import cache_db
+from tf_scraper.common.common import BASE_DOMAIN, BASE_URL, safe_print
+import tf_scraper.common.settings as settings
 from ..common.common import print_banner
 
 

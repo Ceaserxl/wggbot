@@ -8,8 +8,8 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 import aiosqlite
 
-from scraper.common.common import BASE_DOMAIN
-from scraper.common.cache_db import DB_PATH
+from tf_scraper.common.common import BASE_DOMAIN
+from tf_scraper.common.cache_db import DB_PATH
 
 
 # ============================================================
