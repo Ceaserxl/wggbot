@@ -10,7 +10,13 @@ services:
       - LC_ALL=en_US.UTF-8
     command: >
       bash -c "
+        echo '📦 Install Python deps...' &&
+        pip install --upgrade pip && \
+        pip install -r requirements.txt && \
+        playwright install-deps && \
+        playwright install && \
+
         echo '🚀 Starting bot...' &&
-        tail -f /dev/null
+        python /app/bot.py
       "
     restart: unless-stopped

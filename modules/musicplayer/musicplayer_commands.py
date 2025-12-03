@@ -3,7 +3,7 @@
 import discord
 from discord import app_commands
 
-from musicplayer_base import (
+from .musicplayer_base import (
     handle_play,
     handle_playlist,
     handle_skip,

@@ -1,7 +1,6 @@
 # /app/modules/ollama/ollama_base.py
 import aiohttp
-from core.logging import log, sublog
-from core.config import cfg
+from core.logging import sublog
 from . import host, default_model
 # ---------------------------------------------------------
 # Load Ollama settings (fresh every call)

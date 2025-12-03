@@ -1,7 +1,7 @@
 # /app/modules/ollama/__init__.py
 
 import requests
-from core.logging import log, sublog
+from core.logging import sublog
 from core.config import ensure_settings, cfg
 import configparser
 import os
