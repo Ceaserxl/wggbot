@@ -1,236 +1,146 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Require sudo
-if [[ $EUID -ne 0 ]]; then
-    echo "❌ Run with sudo:  sudo ./main"
-    exit 1
-fi
+# ==========================================================
+# CONFIG
+# ==========================================================
+VENV_PATH="python/linux/venv"
+PYTHON_BIN="$VENV_PATH/bin/python"
+ACTIVATE="$VENV_PATH/bin/activate"
 
-CONTAINER="wggbot"
-COMPOSE="docker-compose.yml"
-SCRAPER_SCREEN="scraper"
+BOT_SCRIPT="bot.py"
+SCREEN_NAME="wggbot"
 
+# ==========================================================
+# HELPERS
+# ==========================================================
 pause() { read -rp "Press ENTER to continue..."; }
 
-# -------------------------------
-# Docker helpers
-# -------------------------------
-container_exists() {
-    docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER}$"
-}
-
-container_running() {
-    docker ps --format '{{.Names}}' | grep -q "^${CONTAINER}$"
+require_venv() {
+    if [[ ! -f "$ACTIVATE" ]]; then
+        echo "❌ Virtualenv not found at $ACTIVATE"
+        exit 1
+    fi
 }
 
 bot_running() {
-    docker exec "$CONTAINER" pgrep -f "python .*main.py" >/dev/null 2>&1
+    pgrep -f "$PYTHON_BIN .*${BOT_SCRIPT}" >/dev/null 2>&1
 }
 
-scraper_running() {
-    docker exec "$CONTAINER" bash -lc "screen -list | grep -q '\.${SCRAPER_SCREEN}'"
+screen_running() {
+    screen -list | grep -q "\.${SCREEN_NAME}"
 }
 
-start_bot_inside() {
-    echo "🚀 Starting bot inside container..."
-    docker exec -d "$CONTAINER" bash -lc "source /app/venv/bin/activate && python /app/main.py"
-}
-
-attach_logs() {
-    echo "📜 Attaching to logs (Ctrl+C to detach)..."
-    docker logs -f "$CONTAINER"
-}
-
-# -------------------------------
-# ACTION: START BOT
-# -------------------------------
-action_start() {
-
-    echo "🔍 Checking container state..."
-
-    if ! container_exists; then
-        echo "📦 Container not found — creating with compose..."
-        docker compose -f "$COMPOSE" up -d
-        echo "⏳ Waiting for container boot..."
-        sleep 2
-
-        echo "🚀 Starting bot..."
-        start_bot_inside
-        attach_logs
-        return
-    fi
-
-    if ! container_running; then
-        echo "🐳 Starting container..."
-        docker start "$CONTAINER"
-        echo "🚀 Starting bot..."
-        start_bot_inside
-        attach_logs
-        return
-    fi
+start_attached() {
+    require_venv
 
     if bot_running; then
-        echo "⚠️ Bot is already running inside container."
-        attach_logs
+        echo "⚠️ Bot is already running."
         return
     fi
 
-    echo "🐳 Container running — starting bot..."
-    start_bot_inside
-    attach_logs
+    echo "🚀 Starting bot (attached)..."
+    source "$ACTIVATE"
+    exec "$PYTHON_BIN" "$BOT_SCRIPT"
 }
 
-# -------------------------------
-# ACTION: STOP BOT
-# -------------------------------
-action_stop() {
-    if ! container_exists; then echo "❌ Container does not exist."; pause; return; fi
-    if ! container_running; then echo "❌ Container is not running."; pause; return; fi
+start_detached() {
+    require_venv
 
-    if ! bot_running; then
-        echo "⚠️ Bot is NOT running."
-        pause
+    if screen_running || bot_running; then
+        echo "⚠️ Bot is already running."
         return
     fi
 
-    echo "⛔ Stopping bot..."
-    docker exec "$CONTAINER" pkill -f "python .*main.py" || true
-    pause
-}
-
-# -------------------------------
-# ACTION: RESTART BOT
-# -------------------------------
-action_restart() {
-    action_stop
-    sleep 1
-    action_start
-}
-
-# -------------------------------
-# ACTION: SHELL INTO CONTAINER
-# -------------------------------
-action_shell() {
-    if ! container_exists; then echo "❌ Container does not exist."; pause; return; fi
-    docker exec -it "$CONTAINER" bash -lc "source /app/venv/bin/activate && exec bash"
-}
-
-# -------------------------------
-# ACTION: VIEW CONTAINER LOGS
-# -------------------------------
-action_logs() {
-    if ! container_running; then echo "❌ Container not running."; pause; return; fi
-    docker logs -f "$CONTAINER"
-}
-
-# -------------------------------
-# ACTION: RUN SCRAPER
-# -------------------------------
-action_run_scraper() {
-
-    if ! container_exists; then echo "❌ Container does not exist."; pause; return; fi
-
-    read -rp "Enter tags (space-separated): " raw_tags
-    if [[ -z "$raw_tags" ]]; then
-        echo "❌ No tags provided."
-        pause
-        return
-    fi
-
-    TAG_ARGS=""
-    for t in $raw_tags; do
-        TAG_ARGS="$TAG_ARGS \"$t\""
-    done
-
-    echo "🚀 Launching scraper in screen session '${SCRAPER_SCREEN}'..."
-
-    docker exec "$CONTAINER" bash -lc "
-        screen -S ${SCRAPER_SCREEN} -dm bash -lc '
-            source /app/venv/bin/activate &&
-            cd /app &&
-            python modules/scraper/scraper/main.py ${TAG_ARGS}
-        '
+    echo "🚀 Starting bot (detached, screen '${SCREEN_NAME}')..."
+    screen -S "$SCREEN_NAME" -dm bash -lc "
+        source '$ACTIVATE' &&
+        exec '$PYTHON_BIN' '$BOT_SCRIPT'
     "
 
-    echo "📺 Scraper running in detached screen '${SCRAPER_SCREEN}'."
-    echo "➡ Attach: docker exec -it $CONTAINER screen -r ${SCRAPER_SCREEN}"
-    pause
+    echo "✔ Bot started."
+    echo "➡ Attach with: screen -r $SCREEN_NAME"
 }
 
-# -------------------------------
-# ACTION: ATTACH TO SCRAPER
-# -------------------------------
-action_attach_scraper() {
+stop_bot() {
+    if bot_running; then
+        echo "⛔ Stopping bot..."
+        pkill -f "$PYTHON_BIN .*${BOT_SCRIPT}" || true
+    else
+        echo "⚠️ Bot is not running."
+    fi
 
-    if ! container_exists; then echo "❌ Container does not exist."; pause; return; fi
+    if screen_running; then
+        screen -S "$SCREEN_NAME" -X quit || true
+    fi
+}
 
-    if ! scraper_running; then
-        echo "❌ No scraper session is running."
-        pause
+attach_bot() {
+    if ! screen_running; then
+        echo "❌ No detached session running."
         return
     fi
 
-    echo "📺 Attaching to scraper screen..."
-    docker exec -it "$CONTAINER" screen -r "${SCRAPER_SCREEN}"
+    screen -r "$SCREEN_NAME"
 }
 
-# -------------------------------
-# ACTION: DESTROY CONTAINER
-# -------------------------------
-action_destroy_container() {
+status_bot() {
+    if bot_running; then
+        echo "✔ Bot is running."
+    else
+        echo "❌ Bot is not running."
+    fi
 
-    echo "⚠️ WARNING: This will completely destroy:"
-    echo "   • Docker container"
-    echo "   • Docker volumes"
-    echo "   • local venv directory"
-    echo "   • extracted portable python"
-
-    read -rp "Type YES to confirm: " confirm
-    if [[ "$confirm" != "YES" ]]; then echo "❌ Aborted."; pause; return; fi
-
-    echo "🧨 Taking down container..."
-    docker compose -f "$COMPOSE" down || true
-
-    echo "🗑 Removing venv..."
-    rm -rfv venv || true
-
-    echo "🗑 Removing extracted portable python..."
-    rm -rfv resources/python313/extracted || true
-
-    echo "✔ Destroy complete."
-    pause
+    if screen_running; then
+        echo "📺 Detached screen session exists."
+    fi
 }
 
-# -------------------------------
-# MENU
-# -------------------------------
+# ==========================================================
+# ARG MODE
+# ==========================================================
+case "${1:-}" in
+    -it)
+        start_attached
+        exit 0
+        ;;
+    -d)
+        start_detached
+        exit 0
+        ;;
+    stop)
+        stop_bot
+        exit 0
+        ;;
+    status)
+        status_bot
+        exit 0
+        ;;
+esac
+
+# ==========================================================
+# MENU MODE (DEFAULT)
+# ==========================================================
 while true; do
     clear
     echo "======================================="
-    echo "          DBOT DOCKER MANAGER"
+    echo "        WGG BOT MANAGER (NO DOCKER)"
     echo "======================================="
-    echo "[1] Start Bot (attach to logs)"
-    echo "[2] Stop Bot"
-    echo "[3] Restart Bot"
-    echo "[4] Shell Into Container"
-    echo "[5] View Logs"
-    echo "[6] Destroy Container + Wipe Environment"
-    echo "[7] Run Scraper (space-separated tags)"
-    echo "[8] Attach to Scraper"
+    echo "[1] Start Bot (attached)"
+    echo "[2] Start Bot (detached)"
+    echo "[3] Stop Bot"
+    echo "[4] Attach to Detached Bot"
+    echo "[5] Status"
     echo "[Q] Quit"
     echo "---------------------------------------"
     read -rp "Select an option: " choice
 
     case "${choice,,}" in
-        1) action_start ;;
-        2) action_stop ;;
-        3) action_restart ;;
-        4) action_shell ;;
-        5) action_logs ;;
-        6) action_destroy_container ;;
-        7) action_run_scraper ;;
-        8) action_attach_scraper ;;
+        1) start_attached ; pause ;;
+        2) start_detached ; pause ;;
+        3) stop_bot ; pause ;;
+        4) attach_bot ; pause ;;
+        5) status_bot ; pause ;;
         q) exit 0 ;;
     esac
 done
