@@ -152,7 +152,7 @@ async def play_audio(vc, url, mention, text_channel, title, artist):
     ffmpeg = find_ffmpeg()
     opts = {
         "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-        "options": '-vn -af "volume=0.07"',
+        "options": '-vn -af "volume=0.2"',
     }
 
     vc.play(discord.FFmpegPCMAudio(executable=ffmpeg, source=audio, **opts))

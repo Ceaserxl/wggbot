@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ============================================================
+# CONFIG
+# ============================================================
+IMAGE_NAME="wggbot:latest"
+DOCKERFILE="Dockerfile"
+APP_MOUNT="/mnt/user/projects/wggbot"
+WGG_LIVE="wggbot-live"
+WGG_DEV="wggbot-dev"
+
+# ============================================================
+# HELPERS
+# ============================================================
+stop_container() {
+    docker rm -f "$1" >/dev/null 2>&1 || true
+}
+
+ensure_image() {
+    if ! docker image inspect "${IMAGE_NAME}" >/dev/null 2>&1; then
+        echo "Building image..."
+        docker build -t "${IMAGE_NAME}" -f "${DOCKERFILE}" .
+    fi
+}
+
+start() {
+    echo "Killing..."
+    stop_container "${WGG_LIVE}"
+
+    echo "Starting..."
+    docker run \
+        --name "${WGG_LIVE}" \
+        -v "${APP_MOUNT}:/app" \
+        "${IMAGE_NAME}" \
+        python bot.py
+}
+
+ensure_image
+
+TARGET="${1:-}"
+
+case "$TARGET" in
+    start)
+        start
+        ;;
+    stop)
+        stop_container
+        ;;
+    build)
+        docker build \
+            -t "${IMAGE_NAME}" \
+            -f "${DOCKERFILE}" \
+            .
+        ;;
+    "")
+        menu
+        ;;
+    *)
+        echo "Usage:"
+        echo "  ./wggbot start"
+        echo "  ./wggbot stop"
+        echo "  ./wggbot build"
+        exit 1
+        ;;
+esac
