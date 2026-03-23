@@ -20,9 +20,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     wget \
     git \
-    docker.io \
     ffmpeg \
-    openvpn \
     procps \
     xvfb \
     libgl1 \
