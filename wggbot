@@ -29,7 +29,7 @@ start() {
     stop_container "${WGG_LIVE}"
 
     echo "Starting..."
-    docker run \
+    docker run -d \
         --name "${WGG_LIVE}" \
         -v "${APP_MOUNT}:/app" \
         "${IMAGE_NAME}" \
