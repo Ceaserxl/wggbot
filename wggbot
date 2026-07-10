@@ -31,6 +31,7 @@ start() {
     echo "Starting..."
     docker run -d \
         --name "${WGG_LIVE}" \
+        --restart "unless-stopped" \
         -v "${APP_MOUNT}:/app" \
         "${IMAGE_NAME}" \
         python bot.py
@@ -54,7 +55,7 @@ case "$TARGET" in
             .
         ;;
     "")
-        menu
+        start
         ;;
     *)
         echo "Usage:"
