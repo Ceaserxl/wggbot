@@ -32,6 +32,7 @@ start() {
     docker run -d \
         --name "${WGG_LIVE}" \
         --restart "unless-stopped" \
+        -p "32401:8080" \
         -v "${APP_MOUNT}:/app" \
         "${IMAGE_NAME}" \
         python bot.py
