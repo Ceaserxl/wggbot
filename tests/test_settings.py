@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from core.logging import SecretRedactionFilter
-from core.settings import load_settings
+from wggbot.logging import SecretRedactionFilter
+from wggbot.settings import load_settings
 
 
 def test_load_settings_reads_token_without_exposing_it(
@@ -16,14 +16,12 @@ def test_load_settings_reads_token_without_exposing_it(
         monkeypatch.delenv(key, raising=False)
     env_file = tmp_path / ".env"
     env_file.write_text(
-        "LIVE_DISCORD_TOKEN=live-secret\n"
-        "BETA_DISCORD_TOKEN=beta-secret\n"
-        "WGGBOT_DATA_DIR=" + str(tmp_path / "data") + "\n",
+        "LIVE_DISCORD_TOKEN=live-secret\nBETA_DISCORD_TOKEN=beta-secret\nLOG_LEVEL=INFO\n",
         encoding="utf-8",
     )
     settings = load_settings(env_file)
     assert settings.discord_token == "live-secret"
-    assert settings.data_dir == (tmp_path / "data").resolve()
+    assert settings.log_level == "INFO"
 
 
 def test_load_settings_rejects_placeholder_token(
@@ -41,8 +39,7 @@ def test_injected_environment_does_not_require_readable_dotenv(
     env_file = tmp_path / ".env"
     env_file.write_text("LIVE_DISCORD_TOKEN=file-token\n", encoding="utf-8")
     monkeypatch.setenv("LIVE_DISCORD_TOKEN", "injected-token")
-    monkeypatch.setenv("WGGBOT_DATA_DIR", str(tmp_path / "data"))
-    monkeypatch.setattr("core.settings.os.access", lambda path, mode: False)
+    monkeypatch.setattr("wggbot.settings.os.access", lambda path, mode: False)
     settings = load_settings(env_file)
     assert settings.discord_token == "injected-token"
 

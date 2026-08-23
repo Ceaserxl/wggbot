@@ -2,7 +2,8 @@ FROM python:3.13.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONPATH=/app/src
 
 RUN apt-get update \
     && apt-get install --no-install-recommends -y ca-certificates curl ffmpeg \
@@ -18,4 +19,4 @@ USER wggbot
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD curl --fail --silent http://127.0.0.1:8080/ready >/dev/null || exit 1
-CMD ["python", "bot.py"]
+CMD ["python", "-m", "wggbot"]

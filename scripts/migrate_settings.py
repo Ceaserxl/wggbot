@@ -15,9 +15,6 @@ MAPPINGS = {
     ("wggbot", "debug"): "WGGBOT_DEBUG",
     ("wggbot", "live_discord_token"): "LIVE_DISCORD_TOKEN",
     ("wggbot", "beta_discord_token"): "BETA_DISCORD_TOKEN",
-    ("ollama", "ollama_host"): "OLLAMA_URL",
-    ("ollama", "default_model"): "OLLAMA_MODEL",
-    ("stablediffusion", "sd_host"): "COMFYUI_URL",
     ("musicplayer", "max_queue"): "MUSIC_MAX_QUEUE",
     ("musicplayer", "volume"): "MUSIC_DEFAULT_VOLUME",
 }
@@ -54,7 +51,6 @@ def main() -> None:
         "HEALTH_PORT": "8080",
         "SYNC_COMMANDS": "true",
         "LOG_LEVEL": "INFO",
-        "WGGBOT_DATA_DIR": "/app/data",
         "YTDLP_COOKIE_FILE": "/app/cookies.txt",
         "MUSIC_MAX_QUEUE": "100",
         "MUSIC_MAX_PLAYLIST": "50",

@@ -7,8 +7,6 @@ DEV_CONTAINER="${WGGBOT_DEV_CONTAINER:-wggbot-dev}"
 HOST_PORT="${WGGBOT_PORT:-32401}"
 PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${PROJECT_ROOT}/.env"
-LIVE_DATA_DIR="${PROJECT_ROOT}/data"
-DEV_DATA_DIR="${PROJECT_ROOT}/data-dev"
 COOKIE_FILE="${PROJECT_ROOT}/cookies.txt"
 
 build_image() {
@@ -25,26 +23,14 @@ stop_all() {
     stop_container "${DEV_CONTAINER}"
 }
 
-prepare_data_dir() {
-    local data_dir="$1"
-    if [[ "$(id -u)" == "0" ]]; then
-        install -d -m 0770 -o 10001 -g 10001 "${data_dir}"
-    else
-        mkdir -p "${data_dir}"
-        chmod 0777 "${data_dir}"
-    fi
-}
-
 start_container() {
     local container_name="$1"
     local debug_mode="$2"
-    local data_dir="$3"
 
     if [[ ! -f "${ENV_FILE}" ]]; then
         echo "Missing ${ENV_FILE}; copy .env.example and configure it first." >&2
         exit 1
     fi
-    prepare_data_dir "${data_dir}"
     if [[ "$(id -u)" == "0" ]]; then
         if [[ -f "${COOKIE_FILE}" ]]; then
             chown 10001:10001 "${COOKIE_FILE}"
@@ -67,7 +53,6 @@ start_container() {
         --tmpfs /tmp:rw,nosuid,noexec,size=256m \
         -p "127.0.0.1:${HOST_PORT}:8080" \
         -v "${PROJECT_ROOT}:/app:ro" \
-        -v "${data_dir}:/app/data:rw" \
         "${IMAGE_NAME}"
 }
 
@@ -76,10 +61,10 @@ case "${1:-start}" in
         build_image
         ;;
     start)
-        start_container "${LIVE_CONTAINER}" false "${LIVE_DATA_DIR}"
+        start_container "${LIVE_CONTAINER}" false
         ;;
     dev)
-        start_container "${DEV_CONTAINER}" true "${DEV_DATA_DIR}"
+        start_container "${DEV_CONTAINER}" true
         ;;
     stop)
         stop_all

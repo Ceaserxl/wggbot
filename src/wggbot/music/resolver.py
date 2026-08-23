@@ -9,8 +9,7 @@ from urllib.parse import urlparse
 import aiohttp
 import yt_dlp
 
-from core.settings import Settings
-
+from ..settings import Settings
 from .models import Track
 
 LOGGER = logging.getLogger(__name__)
@@ -263,7 +262,7 @@ class MediaResolver:
                     requester_id=requester_id,
                     requester_mention=requester_mention,
                     duration=int(item.get("duration_ms", 0) / 1000) or None,
-                    source="Spotify metadata → media search",
+                    source="Spotify → media search",
                 )
             )
         if not tracks:

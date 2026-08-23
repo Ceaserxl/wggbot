@@ -1,1 +1,0 @@
-"""WGGBot core services."""

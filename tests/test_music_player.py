@@ -4,8 +4,8 @@ import asyncio
 
 import pytest
 
-from modules.musicplayer.models import Track
-from modules.musicplayer.player import GuildPlayer, QueueFullError
+from wggbot.music.models import Track
+from wggbot.music.player import GuildPlayer, QueueFullError
 
 
 class FakeResolver:

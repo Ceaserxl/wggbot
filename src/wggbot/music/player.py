@@ -4,16 +4,18 @@ import asyncio
 import logging
 import random
 from collections import deque
+from collections.abc import Awaitable, Callable
 from typing import cast
 
 import discord
 
-from core.settings import Settings
-
+from ..settings import Settings
 from .models import Track
-from .sources import MediaResolutionError, MediaResolver
+from .presentation import status_embed
+from .resolver import MediaResolutionError, MediaResolver
 
 LOGGER = logging.getLogger(__name__)
+TrackStartHandler = Callable[["GuildPlayer", Track], Awaitable[None]]
 
 
 class QueueFullError(RuntimeError):
@@ -21,10 +23,17 @@ class QueueFullError(RuntimeError):
 
 
 class GuildPlayer:
-    def __init__(self, guild_id: int, resolver: MediaResolver, settings: Settings):
+    def __init__(
+        self,
+        guild_id: int,
+        resolver: MediaResolver,
+        settings: Settings,
+        on_track_start: TrackStartHandler | None = None,
+    ) -> None:
         self.guild_id = guild_id
         self.resolver = resolver
         self.settings = settings
+        self.on_track_start = on_track_start
         self.queue: deque[Track] = deque()
         self.history: deque[Track] = deque(maxlen=25)
         self.current: Track | None = None
@@ -38,6 +47,14 @@ class GuildPlayer:
         self._skip_requested = False
         self._connect_lock = asyncio.Lock()
         self._worker = asyncio.create_task(self._run(), name=f"music-player-{guild_id}")
+
+    @property
+    def playback_state(self) -> str:
+        if self.voice_client and self.voice_client.is_paused():
+            return "paused"
+        if self.current is not None:
+            return "playing"
+        return "idle"
 
     def enqueue(self, tracks: list[Track]) -> None:
         if len(self.queue) + len(tracks) > self.settings.music_max_queue:
@@ -93,9 +110,7 @@ class GuildPlayer:
                     await self._play(track)
                 except (MediaResolutionError, discord.DiscordException, OSError, RuntimeError):
                     LOGGER.exception("Playback failed in guild %s", self.guild_id)
-                    await self._notify(
-                        f"Could not play **{discord.utils.escape_markdown(track.title)}**; skipping it."
-                    )
+                    await self._notify_failure(track)
                 finally:
                     self.history.appendleft(track)
                     self.current = None
@@ -118,8 +133,6 @@ class GuildPlayer:
             discord.FFmpegPCMAudio(
                 stream,
                 before_options="-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-                # FFmpegPCMAudio appends Discord's required 48 kHz stereo PCM
-                # output contract. Supplying it twice produces FFmpeg warnings.
                 options="-vn",
             ),
             volume=self.volume,
@@ -134,17 +147,22 @@ class GuildPlayer:
             loop.call_soon_threadsafe(finished.set)
 
         voice.play(source, after=after)
-        await self._notify(
-            f"▶️ **{discord.utils.escape_markdown(track.label)}** "
-            f"`{track.duration_label}` · {discord.utils.escape_markdown(track.source)}"
-        )
+        if self.on_track_start is not None:
+            await self.on_track_start(self, track)
         await finished.wait()
         if playback_error:
             raise RuntimeError(str(playback_error[0]))
 
-    async def _notify(self, message: str) -> None:
+    async def _notify_failure(self, track: Track) -> None:
         if self.text_channel:
-            await self.text_channel.send(message, allowed_mentions=discord.AllowedMentions.none())
+            await self.text_channel.send(
+                embed=status_embed(
+                    "Track unavailable",
+                    f"Could not play **{track.label}**. Moving to the next track.",
+                    error=True,
+                ),
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
 
     def pause(self) -> bool:
         if self.voice_client and self.voice_client.is_playing():

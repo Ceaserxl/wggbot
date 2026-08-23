@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from modules.musicplayer.sources import MediaResolver
+from wggbot.music.resolver import MediaResolver
 
 
 def test_cookiefile_is_only_passed_when_present(settings_factory) -> None:

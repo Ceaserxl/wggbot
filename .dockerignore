@@ -8,7 +8,7 @@ __pycache__
 *.pyc
 cookies.txt
 data
+data-dev
 logs
-modules/musicplayer/ffmpeg
 settings.ini
 tests

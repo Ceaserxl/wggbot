@@ -1,6 +1,7 @@
 [tool.pytest.ini_options]
-addopts = "--strict-markers --strict-config --cov=bot --cov=core --cov=modules --cov-report=term-missing"
+addopts = "--strict-markers --strict-config --cov=wggbot --cov-report=term-missing"
 asyncio_mode = "auto"
+pythonpath = ["src"]
 testpaths = ["tests"]
 
 [tool.ruff]
@@ -19,6 +20,7 @@ no_implicit_optional = true
 warn_redundant_casts = true
 warn_unused_ignores = true
 exclude = ["tests"]
+mypy_path = "src"
 
 [[tool.mypy.overrides]]
 module = ["discord.*", "yt_dlp.*"]
