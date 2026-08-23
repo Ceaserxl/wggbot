@@ -1,49 +1,21 @@
-# ============================================
-# Set base image 
-# ============================================
-FROM python:3.13-slim
+FROM python:3.13.12-slim
 
-# ============================================
-# Copy project files
-# ============================================
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y ca-certificates curl ffmpeg \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10001 wggbot \
+    && useradd --uid 10001 --gid wggbot --no-create-home --home-dir /app wggbot
+
 WORKDIR /app
+COPY requirements.lock /tmp/requirements.lock
+RUN python -m pip install --no-cache-dir --require-hashes -r /tmp/requirements.lock
 
-# ============================================
-# Install system deps
-# ============================================
-RUN apt-get update && apt-get install -y \
-    php \
-    php-fpm \
-    php-mysql \
-    php-cli \
-    nginx \
-    curl \
-    wget \
-    git \
-    ffmpeg \
-    procps \
-    xvfb \
-    libgl1 \
-    libglib2.0-0 \
-    libnss3 \
-    libxss1 \
-    libasound2 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libgtk-3-0 \
-    libdrm2 \
-    libxshmfence1 \
-    libgbm1 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxrandr2 \
-    libxkbcommon0 \
-    libasound2 \
-    fonts-liberation \
-    && rm -rf /var/lib/apt/lists/*
-
-# ---------------------------------------------------
-# Python dependencies
-# ---------------------------------------------------
-COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+USER wggbot
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl --fail --silent http://127.0.0.1:8080/ready >/dev/null || exit 1
+CMD ["python", "bot.py"]

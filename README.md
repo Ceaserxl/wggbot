@@ -1,95 +1,140 @@
-# WGGBot — Discord Bot (Chat + Images)
+# WGGBot
 
-Multi-feature Discord bot with:
-- OpenAI (ChatGPT / DALL·E) *(optional)*
-- Stable Diffusion WebUI API *(optional)*
+WGGBot is a modular Discord bot for voice playback, local Ollama prompts, and optional ComfyUI
+image generation. Modules can be enabled, disabled, or reloaded while the Discord process remains
+online.
 
----
+## Current modules
 
-## Quick Start
+| Module | Default | Commands | Purpose |
+| --- | --- | --- | --- |
+| `musicplayer` | enabled | `/music ...` | Search, URLs, playlists, queues, voice controls, and optional Spotify matching |
+| `ollama` | enabled | `/ollama ...` | Prompt and inspect a configured Ollama server |
+| `stablediffusion` | disabled | `/imagine` | Generate through the bundled ComfyUI workflow when explicitly enabled |
 
-    git clone https://github.com/Ceaserxl/WGGBot.git
-    cd WGGBot
-    cp .env.example .env            # fill this in
-    chmod +x ./dbot
-    ./dbot install                  # creates venv, installs deps, installs global "dbot"
-    dbot start                      # run bot in a screen session
+`discord.Intents.all()` is intentional. Enable the corresponding privileged intents for the bot in
+the Discord Developer Portal.
 
-**Common commands**
+## Setup
 
-    dbot start       # start bot (detached screen)
-    dbot stop        # stop bot
-    dbot restart     # stop + start
-    dbot log         # tail the log
-    dbot attach      # attach to the screen session
-    dbot venv        # open a subshell with the venv active
-    dbot export      # write requirements.txt from current venv
+The supported runtime is Docker on Python 3.13. Source is mounted into the container at `/app`; it
+is not copied into the application image.
 
----
+```bash
+cp .env.example .env
+# Edit .env and set LIVE_DISCORD_TOKEN (and BETA_DISCORD_TOKEN when used).
+./start.sh build
+./start.sh
+```
 
-## Environment (.env)
+Lifecycle commands:
 
-Create `.env` (or edit after copying from `.env.example`):
+```bash
+./start.sh build  # build/pull dependencies
+./start.sh        # replace and start wggbot-live
+./start.sh stop   # stop and remove only wggbot-live
+```
 
-    # Discord
-    LIVE_DISCORD_TOKEN=
-    BETA_DISCORD_TOKEN=
+The container runs as a non-root user with a read-only root filesystem, no Linux capabilities, and
+`no-new-privileges`. Its health endpoint is bound to `127.0.0.1:32401` on the host. Docker checks
+`/ready`; readiness requires an active Discord connection.
 
-    # Optional services
-    OPENAI_API_KEY=
-    SD_API_URL=
-    OLLAMA_IP=
-    OLLAMA_CHANNEL_ID=
-    OLLAMA_LIVE_CHANNEL_ID=
+## Migrating the old configuration
 
-    # App / model (optional defaults)
-    APP_URL=
-    CHATGPT_MODEL=gpt-4.1-nano
+For an installation that still has `settings.ini`, run this once before starting the new image:
 
-> Keep `.env` out of git. Commit a sanitized `.env.example`.
+```bash
+python scripts/migrate_settings.py
+```
 
----
+It transfers current values—including the existing Discord tokens—into ignored `.env`, sets mode
+`0600`, and removes the migrated token keys from `settings.ini`. It never prints token values.
 
-## Requirements
+## Live module management
 
-- Python 3.10+ (recommended)
-- `screen` (for background sessions)
-- Stable Diffusion WebUI API *(optional, if using SD features)*
-- OpenAI API key *(optional, if using ChatGPT/DALL·E)*
+These commands are restricted to the Discord application owner:
 
-Ubuntu/Debian:
+- `/modules list`
+- `/modules enable name`
+- `/modules disable name`
+- `/modules reload name`
 
-    sudo apt update
-    sudo apt install -y python3 python3-venv screen
+State is persisted atomically in `data/modules.json`. Enabling or reloading also synchronizes the
+application-command tree. A failed module load is reported as `error` in `/modules list` and the
+health response; it does not masquerade as a successful initialization.
 
----
+Stable Diffusion is deliberately disabled on a fresh installation. Configure `COMFYUI_URL`, then
+run `/modules enable stablediffusion` when it should become available.
 
-## Manual Setup (if not using `dbot install`)
+## Music player
 
-    python3 -m venv venv
-    source venv/bin/activate
-    pip install -r requirements.txt
-    python main.py
+Use `/music play` with search text, a supported media URL, a playlist URL, or an optional Spotify
+track/album/playlist URL. The player uses one queue worker per Discord guild. Only that worker
+advances playback, including after a skip, which prevents overlapping consumers and timing races.
+FFmpeg output is normalized to 48 kHz stereo for Discord voice.
 
----
+Commands include:
 
-## Tips
+- `play`, `now`, `queue`, and `history`
+- `pause`, `resume`, `skip`, `stop`, and `disconnect`
+- `clear`, `remove`, `move`, and `shuffle`
+- `volume`, `repeat`, and `sources`
 
-- Update deps later:
+Users must be in the bot's voice channel to control active playback. Play requests have per-user,
+per-guild cooldowns, and queue/playlist sizes are bounded by configuration.
 
-      dbot venv
-      pip install --upgrade -r requirements.txt
-      dbot export
+### YouTube subscription cookie
 
-- If `dbot` command not found:
+Export the subscription cookie as a Netscape-format cookie file and place it at the ignored path
+configured by `YTDLP_COOKIE_FILE` (default `/app/cookies.txt`). When run as root, `start.sh` secures
+the default file to mode `0600` under the container user's ownership. The bot passes it through
+yt-dlp's `cookiefile` option. `/music sources` reports only whether the file is mounted; it never
+exposes its contents.
 
-      echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
+### Spotify behavior
 
----
+Set `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` to enable Spotify links. The bot retrieves track
+metadata through Spotify's client-credentials API, then searches for a playable version through
+yt-dlp. It does not claim to stream Spotify subscription audio, which Spotify does not provide to
+Discord bots. Playlist and album metadata are paged up to `MUSIC_MAX_PLAYLIST`.
 
-## Features
+yt-dlp-supported sources such as YouTube, SoundCloud, Bandcamp, and direct media URLs can be used
+without Spotify credentials. Actual availability remains subject to each source and its terms.
 
-- **Chat** via OpenAI (if configured)
-- **Image generation** via Stable Diffusion (if configured)
-- **Live/Beta tokens** for staging vs production
-- **One-command lifecycle** with `dbot` (start/stop/restart/log/attach/venv/export)
+## Configuration
+
+All supported keys and defaults are documented in `.env.example`. Important controls include:
+
+- `WGGBOT_DEBUG`: chooses the beta token when true
+- `SYNC_COMMANDS`: synchronize global application commands during startup
+- `OLLAMA_URL` and `OLLAMA_MODEL`
+- `COMFYUI_URL`
+- `MUSIC_MAX_QUEUE`, `MUSIC_MAX_PLAYLIST`, `MUSIC_IDLE_TIMEOUT`, and `MUSIC_DEFAULT_VOLUME`
+- `YTDLP_COOKIE_FILE`
+
+Do not commit `.env`, cookies, runtime `data`, or logs.
+
+## Development and verification
+
+Generate locks from the concise input files with a compatible lock environment:
+
+```bash
+pip-compile --generate-hashes --strip-extras -o requirements.lock requirements.in
+pip-compile --generate-hashes --strip-extras -o requirements-dev.lock requirements-dev.in
+```
+
+Install and validate:
+
+```bash
+python -m pip install --require-hashes -r requirements-dev.lock
+ruff check .
+ruff format --check .
+mypy bot.py core modules
+shellcheck start.sh
+python -m pytest
+pip-audit -r requirements.lock
+docker build -t wggbot:test .
+```
+
+CI runs the same lint, format, type, shell, test, dependency-audit, and container-build gates. Logs
+go to stdout for Docker to manage and no longer clear previous files during import or startup.

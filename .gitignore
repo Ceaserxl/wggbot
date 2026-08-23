@@ -26,9 +26,12 @@ resources/python313/extracted
 # Logs & caches
 *.log
 .cache/
+.local/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+htmlcov/
 *.pid
 
 # Editors/OS
@@ -43,6 +46,7 @@ cookies.txt
 
 downloads/
 downloads_win/
+data/
 *_debug.txt
 cache/
 export/
