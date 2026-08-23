@@ -31,9 +31,14 @@ Lifecycle commands:
 
 ```bash
 ./start.sh build  # build/pull dependencies
-./start.sh        # replace and start wggbot-live
-./start.sh stop   # stop and remove only wggbot-live
+./start.sh        # replace and start wggbot-live with LIVE_DISCORD_TOKEN
+./start.sh dev    # replace and start wggbot-dev with BETA_DISCORD_TOKEN
+./start.sh stop   # stop and remove both live and development containers
 ```
+
+Live and development runs are mutually exclusive because Discord permits only one active session
+per bot token and both use the same local health port. Development module state is isolated in
+ignored `data-dev/`; production continues to use `data/`.
 
 The container runs as a non-root user with a read-only root filesystem, no Linux capabilities, and
 `no-new-privileges`. Its health endpoint is bound to `127.0.0.1:32401` on the host. Docker checks

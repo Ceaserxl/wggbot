@@ -47,6 +47,7 @@ cookies.txt
 downloads/
 downloads_win/
 data/
+data-dev/
 *_debug.txt
 cache/
 export/
