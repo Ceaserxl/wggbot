@@ -1,4 +1,4 @@
-FROM python:3.13.12-slim
+FROM python:3.13.12-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -20,3 +20,15 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD curl --fail --silent http://127.0.0.1:8080/ready >/dev/null || exit 1
 CMD ["python", "-m", "wggbot"]
+
+FROM runtime AS development
+
+USER root
+COPY requirements-dev.lock /tmp/requirements-dev.lock
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y shellcheck \
+    && rm -rf /var/lib/apt/lists/* \
+    && python -m pip install --no-cache-dir --require-hashes -r /tmp/requirements-dev.lock
+USER wggbot
+
+FROM runtime AS production

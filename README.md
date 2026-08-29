@@ -25,6 +25,51 @@ The remaining commands cover direct queue and player management:
 - `clear`, `remove`, `move`, and `shuffle`; and
 - `volume` and `repeat`.
 
+## Operator-only emoji administration
+
+Emoji administration is deliberately not exposed as a Discord command. A local CLI lets an
+operator—or Codex acting for the operator—discover servers, create restorable backups, add emoji
+images, remove or rename exact emojis, and restore missing emojis. It uses the same live bot token
+by default; place `--beta` before the subcommand to use the beta bot instead.
+
+Start by discovering the server IDs available to the bot, then inspect or back up one server:
+
+```bash
+./start.sh emojis servers
+./start.sh emojis list --guild SERVER_ID
+./start.sh emojis backup --guild SERVER_ID
+./start.sh emojis backup-all
+./start.sh emojis verify --from .emoji-backups/SERVER_ID/TIMESTAMP
+```
+
+Mutation commands are previews unless both `--apply` and an explicit Discord audit-log reason are
+provided. Every applied mutation first creates a full server emoji backup and aborts if that safety
+backup fails.
+
+```bash
+# Preview and then add one image (the name must be 2-32 letters, numbers, or underscores).
+./start.sh emojis add --guild SERVER_ID emojis/new.png --name new_emoji
+./start.sh emojis add --guild SERVER_ID emojis/new.png --name new_emoji \
+  --apply --reason "Requested emoji upload"
+
+# A directory is added recursively. Numeric filename prefixes are removed and punctuation becomes _.
+./start.sh emojis add --guild SERVER_ID emojis/pepe_emojis
+
+# Exact name or numeric emoji ID may be used. An ambiguous name must be replaced with an ID.
+./start.sh emojis rename --guild SERVER_ID --emoji old_name --name new_name
+./start.sh emojis remove --guild SERVER_ID --emoji EMOJI_ID
+
+# Preview restoration of missing, non-managed emojis from a generated backup.
+./start.sh emojis restore --guild SERVER_ID --from .emoji-backups/SERVER_ID/TIMESTAMP
+```
+
+Backups are stored under ignored `.emoji-backups/SERVER_ID/TIMESTAMP/` and contain the original
+PNG/GIF assets plus a versioned `manifest.json` with IDs, names, role restrictions, byte counts,
+and SHA-256 hashes. Restore verifies each asset before uploading it. Cross-server restores are
+rejected unless `--allow-cross-server` is explicitly supplied. The bot needs Discord's Create Guild
+Expressions permission for additions and Manage Guild Expressions permission for emojis it did not
+create.
+
 ## Project structure
 
 ```text
@@ -65,9 +110,11 @@ Lifecycle commands:
 
 ```bash
 ./start.sh build  # build or refresh the dependency image
+./start.sh test   # run lint, type, shell, test, coverage, and dependency-audit checks
 ./start.sh        # start wggbot-live with LIVE_DISCORD_TOKEN
 ./start.sh dev    # start wggbot-dev with BETA_DISCORD_TOKEN
 ./start.sh stop   # stop and remove either bot container
+./start.sh emojis # run the operator-only emoji administration CLI
 ```
 
 Live and development runs are mutually exclusive because both use the local health port. The
@@ -116,7 +163,13 @@ and never prints token values.
 
 ## Development and verification
 
-Install and run the same checks used by CI:
+Run the complete check suite in the project's development image:
+
+```bash
+./start.sh test
+```
+
+Or install and run the same checks directly in a compatible Python 3.13 environment:
 
 ```bash
 python -m pip install --require-hashes -r requirements-dev.lock

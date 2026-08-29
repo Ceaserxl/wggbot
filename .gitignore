@@ -43,6 +43,7 @@ Thumbs.db
 # Images & tokens (your originals)
 images/
 cookies.txt
+.emoji-backups/
 
 downloads/
 downloads_win/
