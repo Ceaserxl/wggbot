@@ -70,6 +70,19 @@ rejected unless `--allow-cross-server` is explicitly supplied. The bot needs Dis
 Expressions permission for additions and Manage Guild Expressions permission for emojis it did not
 create.
 
+For a reviewed whole-collection reorganization, `scripts/organize_emoji_collection.py` converts the
+standalone review gallery into `emojis/organization-plan.json`, a server dump, organized local
+folders, and `emojis/catalog.csv`. `scripts/sync_emoji_plan.py` validates every planned name, asset,
+hash, duplicate disposition, live emoji ID, and current per-type capacity before doing anything.
+It is a dry run unless `--apply --reason` is supplied, creates one full safety backup before the
+first mutation, and can safely resume a partially completed plan by ID and final name.
+
+```bash
+python scripts/sync_emoji_plan.py --plan emojis/organization-plan.json
+python scripts/sync_emoji_plan.py --plan emojis/organization-plan.json \
+  --apply --reason "Owner approved reviewed emoji reorganization"
+```
+
 ## Project structure
 
 ```text
